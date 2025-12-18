@@ -10,6 +10,17 @@ from psmpy.plotting import *
 from sklearn.neighbors import NearestNeighbors
 
 def load_adult(url):
+    """
+    Loads, encodes, and normalizes the Adult Census Income dataset from a URL.
+
+    Args:
+        url (str): The web link or local path to the Adult dataset CSV file.
+
+    Returns
+    -------
+        X (pd.DataFrame): Processed feature matrix with encoded categories and scaled numerical values.
+        y (numpy.ndarray): Encoded target vector (income) where 0 and 1 represent income brackets.
+    """
     data = pd.read_csv(url)
     #data = shuffle(data)
    
@@ -32,6 +43,36 @@ def load_adult(url):
 
 
 def load_adult_age(url, sensitive_feature):
+    """
+    Loads Adult dataset and partitions it into three age-based clients for federated learning.
+
+    Args:
+        url (str): Path or URL to the raw Adult dataset CSV.
+        sensitive_feature (str): Column name used for fairness grouping (e.g., 'race' or 'sex').
+
+    Returns
+    -------
+        data_dict: dict
+            Dictionary mapping 'client_1' (age 0-29), 'client_2' (age 30-39), and 'client_3' (age 40+) to their respective PyTorch tensors {X, y, s, y_pot}.
+
+        X_test: torch.Tensor
+             A combined PyTorch tensor containing test features from all three age partitions.
+
+        y_test: torch.Tensor 
+            A combined PyTorch tensor containing binary labels for the test set.
+
+        sex_list: list
+            A list of raw sensitive feature values extracted from the combined test set.
+
+        column_names_list: list
+            A list of strings representing the feature column names.
+
+        ytest_potential: torch.Tensor
+            A PyTorch tensor containing potential outcome labels for the combined test set.
+    
+    """
+
+    
     data = pd.read_csv(url)
     #data = shuffle(data)
 

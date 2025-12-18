@@ -10,6 +10,19 @@ from psmpy.plotting import *
 from sklearn.neighbors import NearestNeighbors
 
 def load_bank(url):
+    """
+    Loads, encodes, and normalizes the Bank Marketing dataset.
+
+    Args:
+        url (str): The web link or local path to the Bank dataset CSV file.
+
+    Returns
+    -------
+    X : pd.DataFrame
+        Processed feature matrix with encoded categories and scaled numerical values.
+    y : numpy.ndarray
+        Encoded target vector ('y') representing whether the client subscribed to a term deposit.
+    """
     data = pd.read_csv(url)
     #data = shuffle(data)
    
@@ -31,6 +44,28 @@ def load_bank(url):
     return X, y
 
 def load_bank_age_5(url, sensitive_feature):
+    """
+    Loads Bank dataset and partitions it into five age-based clients for federated learning.
+
+    Args:
+        url (str): The web link or local path to the Bank dataset CSV file.
+        sensitive_feature (str): The column name to be used as the sensitive attribute.
+
+    Returns
+    -------
+    data_dict : dict
+        Maps 'client_1' through 'client_5' (stratified by age) to tensors {X, y, s, y_pot}.
+    X_test : torch.Tensor
+        Combined and normalized test features from all five age partitions.
+    y_test : torch.Tensor
+        Combined binary labels for the test set.
+    sex_list : list
+        Sensitive feature values extracted from the combined test set.
+    column_names_list : list
+        List of strings representing the feature column names.
+    ytest_potential : torch.Tensor
+        Potential outcome labels for the combined test set.
+    """
     data = pd.read_csv(url)
     #data = shuffle(data)
 
@@ -168,6 +203,28 @@ def load_bank_age_5(url, sensitive_feature):
     return data_dict, X_test, y_test, sex_list, column_names_list,ytest_potential
 
 def load_bank_age(url, sensitive_feature):
+    """
+    Loads Bank dataset and partitions it into three age-based clients for federated learning.
+
+    Args:
+        url (str): The web link or local path to the Bank dataset CSV file.
+        sensitive_feature (str): The column name to be used as the sensitive attribute.
+
+    Returns
+    -------
+    data_dict : dict
+        Maps 'client_1' (0-29), 'client_2' (30-39), and 'client_3' (40+) to tensors {X, y, s, y_pot}.
+    X_test : torch.Tensor
+        Combined and normalized test features from all three age partitions.
+    y_test : torch.Tensor
+        Combined binary labels for the test set.
+    sex_list : list
+        Sensitive feature values extracted from the combined test set.
+    column_names_list : list
+        List of strings representing the feature column names.
+    ytest_potential : torch.Tensor
+        Potential outcome labels for the combined test set.
+    """
     data = pd.read_csv(url)
     #data = shuffle(data)
 

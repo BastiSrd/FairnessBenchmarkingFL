@@ -11,6 +11,27 @@ from sklearn.neighbors import NearestNeighbors
 from collections import defaultdict
 
 def load_acs():
+    """
+    Loads and processes ACS Income data from state-level CSVs into a federated PyTorch format.
+
+    Inputs:
+        None (Reads .csv files from the './acs_dataset/' directory).
+
+    Returns
+    -------
+    data_dict : dict
+        Maps 'client_i' to a dict of torch.Tensor objects {X, y, s, y_pot} per state.
+    X_test : torch.Tensor
+        Combined and normalized test features from all states.
+    y_test : torch.Tensor
+        Combined binary income labels (1 if >$50k, 0 otherwise).
+    sex_list : list
+        Sensitive feature values (RAC1P) for the combined test set.
+    column_names_list : list
+        List of feature strings included in the tensors.
+    y_pot : torch.Tensor
+        A zero-filled placeholder tensor for potential outcome logic.
+    """
     #states = ['ca', 'il', 'ny', 'tx', 'fl', 'pa', 'oh', 'mi', 'ga', 'nc'] #10 states
      #all states
     states = [
