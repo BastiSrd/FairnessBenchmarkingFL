@@ -366,12 +366,12 @@ def load_bank_random(url, sensitive_feature, num_clients):
         encoder = LabelEncoder()
         data[col] = encoder.fit_transform(data[col])
 
-    # 2. Normalize standard numerical columns (globally, as in original)
-    numerical_columns_base = ['balance', 'day', 'duration', 'campaign', 'pdays']
+    # 2. Normalize ALL numerical columns
+    all_numerical_columns = ['age', 'balance', 'day', 'duration', 'campaign', 'pdays']
     scaler = StandardScaler()
-    data[numerical_columns_base] = scaler.fit_transform(data[numerical_columns_base])
+    data[all_numerical_columns] = scaler.fit_transform(data[all_numerical_columns])
     
-    # 3. Shuffle data before splitting
+    # 3. Shuffle data before splitting (Ensures IID)
     data = shuffle(data, random_state=42)
     
     # 4. Split data into N chunks
@@ -386,11 +386,6 @@ def load_bank_random(url, sensitive_feature, num_clients):
         
         df_chunk = df_chunk.dropna()
         
-        numerical_columns_age = ['age']
-        scaler_age = StandardScaler()
-        df_chunk[numerical_columns_age] = scaler_age.fit_transform(df_chunk[numerical_columns_age])
-        
-        # Split into train (90%) and test (10%)
         df_train, df_test = train_test_split(df_chunk, test_size=0.1, random_state=42)
         
         test_dfs_list.append(df_test)
@@ -398,9 +393,7 @@ def load_bank_random(url, sensitive_feature, num_clients):
         X_client = df_train.drop('y', axis=1)
         y_client = LabelEncoder().fit_transform(df_train['y']) 
         
-        # Extract sensitive feature
         s_client = X_client[sensitive_feature]
-        
         
         y_potential_client = y_client 
         
@@ -419,10 +412,6 @@ def load_bank_random(url, sensitive_feature, num_clients):
     # 6. Process Global Test Set
     test_df = pd.concat(test_dfs_list, ignore_index=True)
     
-    all_numerical_cols = numerical_columns_base + ['age']
-    scaler_test = StandardScaler()
-    test_df[all_numerical_cols] = scaler_test.fit_transform(test_df[all_numerical_cols])
-    
     X_test = test_df.drop('y', axis=1)
     y_test = LabelEncoder().fit_transform(test_df['y'])
     
@@ -430,13 +419,12 @@ def load_bank_random(url, sensitive_feature, num_clients):
     column_names_list = X_test.columns.tolist()
     sex_list = sex_column.tolist()
     
-    ytest_potential = y_test # Placeholder
+    ytest_potential = y_test 
     ytest_potential_tensor = torch.tensor(ytest_potential, dtype=torch.float32)
     X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
     y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
     
     return data_dict, X_test_tensor, y_test_tensor, sex_list, column_names_list, ytest_potential_tensor
-
 
 if __name__ == "__main__":
     a, _,_,_,_,_ = load_bank_random("../Datasets/bank-full.csv", "age",7)

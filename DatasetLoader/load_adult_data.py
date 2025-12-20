@@ -210,12 +210,12 @@ def load_adult_random(url, sensitive_feature, num_clients):
         encoder = LabelEncoder()
         data[col] = encoder.fit_transform(data[col])
         
-    # 2. Normalize standard numerical columns (excluding 'age' initially, matching original logic)
-    numerical_columns = ['fnlwgt', 'education.num', 'capital.gain', 'capital.loss', 'hours.per.week']
+    # 2. Normalize ALL numerical columns 
+    numerical_columns = ['age', 'fnlwgt', 'education.num', 'capital.gain', 'capital.loss', 'hours.per.week']
     scaler = StandardScaler()
     data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
     
-    # 3. Shuffle data before splitting to ensure random IID partitions
+    # 3. Shuffle data
     data = shuffle(data, random_state=42)
     
     # 4. Split data into N chunks
@@ -224,44 +224,29 @@ def load_adult_random(url, sensitive_feature, num_clients):
     data_dict = {}
     test_dfs_list = []
     
-    # Define age column for specific scaling per client (matching original logic)
-    age_col = ['age']
-    
     # 5. Process each client chunk
     for i, df_chunk in enumerate(client_dfs):
         client_name = f"client_{i+1}"
         
-        # Drop NAs
         df_chunk = df_chunk.dropna()
         
-        # Scale 'age' column specifically for this client partition
-        scaler_age = StandardScaler()
-        df_chunk[age_col] = scaler_age.fit_transform(df_chunk[age_col])
         
-        # Split train/test (90/10)
         df_train, df_test = train_test_split(df_chunk, test_size=0.1, random_state=42)
         
-        # Save test set for later aggregation
         test_dfs_list.append(df_test)
         
-        # Prepare Train Features and Target
-        # Note: 'income' is the target in Adult dataset
         X_client = df_train.drop('income', axis=1)
         y_client = LabelEncoder().fit_transform(df_train['income'])
         
-        # Extract sensitive feature
         s_client = X_client[sensitive_feature]
         
-        # Placeholder for potential outcomes (matching original logic)
         y_potential_client = y_client
         
-        # Convert to Tensors
         X_tensor = torch.tensor(X_client.values, dtype=torch.float32)
         y_tensor = torch.tensor(y_client, dtype=torch.float32)
         s_tensor = torch.from_numpy(s_client.values).float()
         y_pot_tensor = torch.tensor(y_potential_client, dtype=torch.float32)
         
-        # Store in dictionary
         data_dict[client_name] = {
             "X": X_tensor, 
             "y": y_tensor, 
@@ -272,19 +257,13 @@ def load_adult_random(url, sensitive_feature, num_clients):
     # 6. Process Global Test Set
     test_df = pd.concat(test_dfs_list, ignore_index=True)
     
-    # Re-normalize 'age' on the combined test set
-    scaler_test = StandardScaler()
-    test_df[age_col] = scaler_test.fit_transform(test_df[age_col])
-    
     X_test = test_df.drop('income', axis=1)
     y_test = LabelEncoder().fit_transform(test_df['income'])
     
-    # Extract Metadata
     sex_column = X_test[sensitive_feature]
     column_names_list = X_test.columns.tolist()
     sex_list = sex_column.tolist()
     
-    # Prepare Test Tensors
     ytest_potential = y_test
     ytest_potential_tensor = torch.tensor(ytest_potential, dtype=torch.float32)
     X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
