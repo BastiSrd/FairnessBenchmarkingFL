@@ -8,6 +8,7 @@ from psmpy import PsmPy
 from psmpy.functions import cohenD
 from psmpy.plotting import *
 from sklearn.neighbors import NearestNeighbors
+from pathlib import Path
 
 def load_bank(url):
     """
@@ -46,6 +47,7 @@ def load_bank(url):
 def load_bank_age_5(url, sensitive_feature):
     """
     Loads Bank dataset and partitions it into five age-based clients for federated learning.
+    The y_pot's are currently set to the exact same data as y.
 
     Args:
         url (str): The web link or local path to the Bank dataset CSV file.
@@ -205,6 +207,7 @@ def load_bank_age_5(url, sensitive_feature):
 def load_bank_age(url, sensitive_feature):
     """
     Loads Bank dataset and partitions it into three age-based clients for federated learning.
+    The y_pot's are currently set to the exact same data as y.
 
     Args:
         url (str): The web link or local path to the Bank dataset CSV file.
@@ -331,5 +334,110 @@ def load_bank_age(url, sensitive_feature):
     return data_dict, X_test, y_test, sex_list, column_names_list,ytest_potential
 
 
+def load_bank_random(url, sensitive_feature, num_clients):
+    """
+    Loads Bank dataset and partitions it into N randomly split clients for federated learning.
+
+    Args:
+        url (str): The web link or local path to the Bank dataset CSV file.
+        sensitive_feature (str): The column name to be used as the sensitive attribute.
+        num_clients (int): The number of clients to split the data into.
+
+    Returns
+    -------
+    data_dict : dict
+        Maps 'client_1' through 'client_N' to tensors {X, y, s, y_pot}.
+    X_test : torch.Tensor
+        Combined and normalized test features from all partitions.
+    y_test : torch.Tensor
+        Combined binary labels for the test set.
+    sex_list : list
+        Sensitive feature values extracted from the combined test set.
+    column_names_list : list
+        List of strings representing the feature column names.
+    ytest_potential : torch.Tensor
+        Potential outcome labels for the combined test set.
+    """
+    data = pd.read_csv(url)
+
+    # 1. Encode categorical columns
+    categorical_columns = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'previous', 'poutcome']
+    for col in categorical_columns:
+        encoder = LabelEncoder()
+        data[col] = encoder.fit_transform(data[col])
+
+    # 2. Normalize standard numerical columns (globally, as in original)
+    numerical_columns_base = ['balance', 'day', 'duration', 'campaign', 'pdays']
+    scaler = StandardScaler()
+    data[numerical_columns_base] = scaler.fit_transform(data[numerical_columns_base])
+    
+    # 3. Shuffle data before splitting
+    data = shuffle(data, random_state=42)
+    
+    # 4. Split data into N chunks
+    client_dfs = np.array_split(data, num_clients)
+    
+    data_dict = {}
+    test_dfs_list = []
+    
+    # 5. Process each client chunk
+    for i, df_chunk in enumerate(client_dfs):
+        client_id = f"client_{i+1}"
+        
+        df_chunk = df_chunk.dropna()
+        
+        numerical_columns_age = ['age']
+        scaler_age = StandardScaler()
+        df_chunk[numerical_columns_age] = scaler_age.fit_transform(df_chunk[numerical_columns_age])
+        
+        # Split into train (90%) and test (10%)
+        df_train, df_test = train_test_split(df_chunk, test_size=0.1, random_state=42)
+        
+        test_dfs_list.append(df_test)
+        
+        X_client = df_train.drop('y', axis=1)
+        y_client = LabelEncoder().fit_transform(df_train['y']) 
+        
+        # Extract sensitive feature
+        s_client = X_client[sensitive_feature]
+        
+        
+        y_potential_client = y_client 
+        
+        X_client_tensor = torch.tensor(X_client.values, dtype=torch.float32)
+        y_client_tensor = torch.tensor(y_client, dtype=torch.float32)
+        s_client_tensor = torch.from_numpy(s_client.values).float()
+        y_potential_tensor = torch.tensor(y_potential_client, dtype=torch.float32)
+        
+        data_dict[client_id] = {
+            "X": X_client_tensor, 
+            "y": y_client_tensor, 
+            "s": s_client_tensor, 
+            "y_pot": y_potential_tensor
+        }
+
+    # 6. Process Global Test Set
+    test_df = pd.concat(test_dfs_list, ignore_index=True)
+    
+    all_numerical_cols = numerical_columns_base + ['age']
+    scaler_test = StandardScaler()
+    test_df[all_numerical_cols] = scaler_test.fit_transform(test_df[all_numerical_cols])
+    
+    X_test = test_df.drop('y', axis=1)
+    y_test = LabelEncoder().fit_transform(test_df['y'])
+    
+    sex_column = X_test[sensitive_feature]
+    column_names_list = X_test.columns.tolist()
+    sex_list = sex_column.tolist()
+    
+    ytest_potential = y_test # Placeholder
+    ytest_potential_tensor = torch.tensor(ytest_potential, dtype=torch.float32)
+    X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
+    y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
+    
+    return data_dict, X_test_tensor, y_test_tensor, sex_list, column_names_list, ytest_potential_tensor
+
+
 if __name__ == "__main__":
-    print(load_bank("../Datasets/bank-full.csv"))
+    a, _,_,_,_,_ = load_bank_random("../Datasets/bank-full.csv", "age",7)
+    print(a)
