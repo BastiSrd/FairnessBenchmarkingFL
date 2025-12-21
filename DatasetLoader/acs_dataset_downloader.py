@@ -13,7 +13,7 @@ states = [
 ]
 
 # Create an output directory if it doesn't exist
-output_dir = "./Datasets/acs_dataset"
+output_dir = "../Datasets/acs_dataset"
 os.makedirs(output_dir, exist_ok=True)
 for state in states:
     state_frames = []
@@ -31,7 +31,7 @@ for state in states:
             
             # 3. Create DataFrame
             df_year = pd.DataFrame(features, columns=ACSIncome.features)
-            df_year['PINCP'] = label # Target variable named exactly for your function
+            df_year['PINCP'] = label # Target variable named to match loading function
 
             output_path = os.path.join(output_dir, f"{state}_data.csv")
             df_year.to_csv(output_path, index=False)

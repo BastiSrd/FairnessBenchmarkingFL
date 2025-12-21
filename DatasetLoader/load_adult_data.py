@@ -177,6 +177,102 @@ def load_adult_age(url, sensitive_feature):
     
     return data_dict, X_test, y_test, sex_list, column_names_list,ytest_potential
 
+def load_adult_random(url, sensitive_feature, num_clients):
+    """
+    Loads Adult dataset and partitions it into N randomly split clients for federated learning.
+
+    Args:
+        url (str): Path or URL to the raw Adult dataset CSV.
+        sensitive_feature (str): Column name used for fairness grouping (e.g., 'race' or 'sex').
+        num_clients (int): The number of clients to split the data into.
+
+    Returns
+    -------
+    data_dict : dict
+        Maps 'client_1' through 'client_N' to tensors {X, y, s, y_pot}.
+    X_test : torch.Tensor
+        Combined and normalized test features from all partitions.
+    y_test : torch.Tensor
+        Combined binary labels for the test set.
+    sex_list : list
+        Sensitive feature values extracted from the combined test set.
+    column_names_list : list
+        List of strings representing the feature column names.
+    ytest_potential : torch.Tensor
+        Potential outcome labels for the combined test set.
+    """
+    
+    data = pd.read_csv(url)
+
+    # 1. Encode categorical columns
+    categorical_columns = ['workclass', 'education', 'marital.status', 'occupation', 'relationship', 'race', 'sex', 'native.country']
+    for col in categorical_columns:
+        encoder = LabelEncoder()
+        data[col] = encoder.fit_transform(data[col])
+        
+    # 2. Normalize ALL numerical columns 
+    numerical_columns = ['age', 'fnlwgt', 'education.num', 'capital.gain', 'capital.loss', 'hours.per.week']
+    scaler = StandardScaler()
+    data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
+    
+    # 3. Shuffle data
+    data = shuffle(data, random_state=42)
+    
+    # 4. Split data into N chunks
+    client_dfs = np.array_split(data, num_clients)
+    
+    data_dict = {}
+    test_dfs_list = []
+    
+    # 5. Process each client chunk
+    for i, df_chunk in enumerate(client_dfs):
+        client_name = f"client_{i+1}"
+        
+        df_chunk = df_chunk.dropna()
+        
+        
+        df_train, df_test = train_test_split(df_chunk, test_size=0.1, random_state=42)
+        
+        test_dfs_list.append(df_test)
+        
+        X_client = df_train.drop('income', axis=1)
+        y_client = LabelEncoder().fit_transform(df_train['income'])
+        
+        s_client = X_client[sensitive_feature]
+        
+        y_potential_client = y_client
+        
+        X_tensor = torch.tensor(X_client.values, dtype=torch.float32)
+        y_tensor = torch.tensor(y_client, dtype=torch.float32)
+        s_tensor = torch.from_numpy(s_client.values).float()
+        y_pot_tensor = torch.tensor(y_potential_client, dtype=torch.float32)
+        
+        data_dict[client_name] = {
+            "X": X_tensor, 
+            "y": y_tensor, 
+            "s": s_tensor, 
+            "y_pot": y_pot_tensor
+        }
+
+    # 6. Process Global Test Set
+    test_df = pd.concat(test_dfs_list, ignore_index=True)
+    
+    X_test = test_df.drop('income', axis=1)
+    y_test = LabelEncoder().fit_transform(test_df['income'])
+    
+    sex_column = X_test[sensitive_feature]
+    column_names_list = X_test.columns.tolist()
+    sex_list = sex_column.tolist()
+    
+    ytest_potential = y_test
+    ytest_potential_tensor = torch.tensor(ytest_potential, dtype=torch.float32)
+    X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
+    y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
+    
+    return data_dict, X_test_tensor, y_test_tensor, sex_list, column_names_list, ytest_potential_tensor
+
+
 if __name__ == "__main__":
-    print(load_adult("../Datasets/adult.csv"))
+    a, _,_,_,_,_ = load_adult_random("../Datasets/adult.csv", "sex",7)
+    print(a)
 
