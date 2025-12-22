@@ -204,7 +204,7 @@ def load_bank_age_5(url, sensitive_feature):
     
     return data_dict, X_test, y_test, sex_list, column_names_list,ytest_potential
 
-def load_bank_age(url, sensitive_feature):
+def load_bank_age3(url, sensitive_feature):
     """
     Loads Bank dataset and partitions it into three age-based clients for federated learning.
     The y_pot's are currently set to the exact same data as y.
