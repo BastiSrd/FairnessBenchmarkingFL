@@ -216,7 +216,7 @@ def load_acs_states_3(sensitive_feature='RAC1P'):
     return data_dict, X_test_tensor, y_test_tensor, sex_list, col_names, y_pot_test
 
 
-def load_acs_states_3(sensitive_feature='RAC1P'):
+def load_acs_states_5(sensitive_feature='RAC1P'):
     """
     Loads and processes ACS Income data from state-level CSVs into a federated PyTorch format.
     The data is split for 5 clients splitting the 50 states across 5 clients randomly.
