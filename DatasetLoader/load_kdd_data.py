@@ -72,7 +72,7 @@ def load_kdd(url):
     y = LabelEncoder().fit_transform(data['class'])
     return X, y
 
-def load_kdd_age(url, sensitive_feature):
+def load_kdd_age3(url, sensitive_feature):
     """
     Loads the KDD dataset and creates a NON-IID federated setup
     by splitting clients according to age groups.
@@ -101,13 +101,31 @@ def load_kdd_age(url, sensitive_feature):
     #data = shuffle(data)
 
     # Encode categorical columns
-    categorical_columns = ["class-of-worker", "education", "enroll-in-edu-inst-last-wk", "marital-stat", "major-industry-code", "major-occupation-code", "race", "hispanic-origin", "sex", "member-of-a-labor-union", "reason-for-unemployment", "full-or-part-time-employment-stat", "tax-filer-stat","region-of-previous-residence", "state-of-previous-residence", "detailed-household-and-family-stat","detailed-household-summary-in-household", "migration-code-change-in-msa", "migration-code-change-in-reg","migration-code-move-within-reg", "live-in-this-house-1-year-ago", "migration-prev-res-in-sunbelt", "family-members-under-18", "country-of-birth-father", "country-of-birth-mother", "country-of-birth-self", "citizenship", "own-business-or-self-employed", "fill-inc-questionnaire-for-veterans-admin"]
+    categorical_columns = [
+        "class-of-worker", "education", "enroll-in-edu-inst-last-wk", "marital-stat",
+        "major-industry-code", "major-occupation-code", "race", "hispanic-origin",
+        "sex", "member-of-a-labor-union", "reason-for-unemployment",
+        "full-or-part-time-employment-stat", "tax-filer-stat",
+        "region-of-previous-residence", "state-of-previous-residence",
+        "detailed-household-and-family-stat", "detailed-household-summary-in-household",
+        "migration-code-change-in-msa", "migration-code-change-in-reg",
+        "migration-code-move-within-reg", "live-in-this-house-1-year-ago",
+        "migration-prev-res-in-sunbelt", "family-members-under-18",
+        "country-of-birth-father", "country-of-birth-mother",
+        "country-of-birth-self", "citizenship",
+        "own-business-or-self-employed", "fill-inc-questionnaire-for-veterans-admin"
+    ]
     for col in categorical_columns:
         encoder = LabelEncoder()
         data[col] = encoder.fit_transform(data[col])
 
     # Normalize numerical columns
-    numerical_columns = ["detailed-industry-recode","detailed-occupation-recode","wage-per-hour","capital-gains", "capital-losses", "num-persons-worked-for-employer", "dividends-from-stocks", "veterans-benefits","weeks-worked-in-year", "year"]
+    numerical_columns = [
+        "detailed-industry-recode", "detailed-occupation-recode",
+        "wage-per-hour", "capital-gains", "capital-losses",
+        "num-persons-worked-for-employer", "dividends-from-stocks",
+        "veterans-benefits", "weeks-worked-in-year", "year"
+    ]
     scaler = StandardScaler()
     data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
     
@@ -196,6 +214,166 @@ def load_kdd_age(url, sensitive_feature):
     data_dict["client_3"] = {"X": X_client3, "y": y_client3, "s": s_client3, "y_pot": y_potential_client3}
     
     return data_dict, X_test, y_test, sex_list, column_names_list,ytest_potential
+
+def load_kdd_age5(url, sensitive_feature):
+    """
+    Loads the KDD dataset and partitions it into five age-based clients for federated learning.
+
+    Args:
+        url (str): Dataset path (CSV).
+        sensitive_feature (str): The column name to be used as the sensitive attribute. 
+
+    Returns
+    -------
+        data_dict: dict
+            Dictionary mapping 'client_1' through 'client_5' (stratified by age) to their respective PyTorch tensors {X, y, s, y_pot}.
+        X_test : torch.Tensor
+            Combined and normalized test features from all partitions.
+        y_test : torch.Tensor
+            Combined binary labels for the test set.
+        sex_list : list
+            Sensitive feature values extracted from the combined test set.
+        column_names_list : list
+            List of strings representing the feature column names.
+        ytest_potential : torch.Tensor
+            Potential outcome labels for the combined test set.
+    """
+
+    data = pd.read_csv(url)
+    #data = shuffle(data)
+
+    # Encode categorical columns
+    categorical_columns = ["class-of-worker", "education", "enroll-in-edu-inst-last-wk",
+                           "marital-stat", "major-industry-code", "major-occupation-code",
+                           "race", "hispanic-origin", "sex", "member-of-a-labor-union",
+                           "reason-for-unemployment", "full-or-part-time-employment-stat",
+                           "tax-filer-stat", "region-of-previous-residence",
+                           "state-of-previous-residence", "detailed-household-and-family-stat",
+                           "detailed-household-summary-in-household",
+                           "migration-code-change-in-msa", "migration-code-change-in-reg",
+                           "migration-code-move-within-reg", "live-in-this-house-1-year-ago",
+                           "migration-prev-res-in-sunbelt", "family-members-under-18",
+                           "country-of-birth-father", "country-of-birth-mother",
+                           "country-of-birth-self", "citizenship",
+                           "own-business-or-self-employed",
+                           "fill-inc-questionnaire-for-veterans-admin"]
+    for col in categorical_columns:
+        encoder = LabelEncoder()
+        data[col] = encoder.fit_transform(data[col])
+
+    # Normalize numerical columns
+    numerical_columns = ["detailed-industry-recode", "detailed-occupation-recode",
+                         "wage-per-hour", "capital-gains", "capital-losses",
+                         "num-persons-worked-for-employer", "dividends-from-stocks",
+                         "veterans-benefits", "weeks-worked-in-year", "year"]
+    scaler = StandardScaler()
+    data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
+
+    # Split into five age-based clients
+    mask = (data['age'] >= 0) & (data['age'] <= 25)
+    df1 = data[mask]
+    mask = (data['age'] >= 26) & (data['age'] <= 35)
+    df2 = data[mask]
+    mask = (data['age'] >= 36) & (data['age'] <= 45)
+    df3 = data[mask]
+    mask = (data['age'] >= 46) & (data['age'] <= 55)
+    df4 = data[mask]
+    mask = (data['age'] >= 56)
+    df5 = data[mask]
+
+    df1 = df1.dropna()
+    df2 = df2.dropna()
+    df3 = df3.dropna()
+    df4 = df4.dropna()
+    df5 = df5.dropna()
+
+    # Scale the 'age' column
+    numerical_columns = ['age']
+    scaler = StandardScaler()
+    df1[numerical_columns] = scaler.fit_transform(df1[numerical_columns])
+    df2[numerical_columns] = scaler.fit_transform(df2[numerical_columns])
+    df3[numerical_columns] = scaler.fit_transform(df3[numerical_columns])
+    df4[numerical_columns] = scaler.fit_transform(df4[numerical_columns])
+    df5[numerical_columns] = scaler.fit_transform(df5[numerical_columns])
+
+    # Split train/test for each client
+    df1, test_df1 = train_test_split(df1, test_size=0.1, random_state=42)
+    df2, test_df2 = train_test_split(df2, test_size=0.1, random_state=42)
+    df3, test_df3 = train_test_split(df3, test_size=0.1, random_state=42)
+    df4, test_df4 = train_test_split(df4, test_size=0.1, random_state=42)
+    df5, test_df5 = train_test_split(df5, test_size=0.1, random_state=42)
+
+    test_df = result = pd.concat([test_df1, test_df2, test_df3, test_df4, test_df5], ignore_index=True)
+    test_df[numerical_columns] = scaler.fit_transform(test_df[numerical_columns])
+
+    X_client1 = df1.drop('class', axis=1)
+    y_client1 = LabelEncoder().fit_transform(df1['class'])
+    X_client2 = df2.drop('class', axis=1)
+    y_client2 = LabelEncoder().fit_transform(df2['class'])
+    X_client3 = df3.drop('class', axis=1)
+    y_client3 = LabelEncoder().fit_transform(df3['class'])
+    X_client4 = df4.drop('class', axis=1)
+    y_client4 = LabelEncoder().fit_transform(df4['class'])
+    X_client5 = df5.drop('class', axis=1)
+    y_client5 = LabelEncoder().fit_transform(df5['class'])
+
+    s_client1 = X_client1[sensitive_feature]
+    y_potential_client1 = y_client1
+    X_client1 = torch.tensor(X_client1.values, dtype=torch.float32)
+    y_client1 = torch.tensor(y_client1, dtype=torch.float32)
+    s_client1 = torch.from_numpy(s_client1.values).float()
+    y_potential_client1 = torch.tensor(y_potential_client1, dtype=torch.float32)
+
+    s_client2 = X_client2[sensitive_feature]
+    y_potential_client2 = y_client2
+    X_client2 = torch.tensor(X_client2.values, dtype=torch.float32)
+    y_client2 = torch.tensor(y_client2, dtype=torch.float32)
+    s_client2 = torch.from_numpy(s_client2.values).float()
+    y_potential_client2 = torch.tensor(y_potential_client2, dtype=torch.float32)
+
+    s_client3 = X_client3[sensitive_feature]
+    y_potential_client3 = y_client3
+    X_client3 = torch.tensor(X_client3.values, dtype=torch.float32)
+    y_client3 = torch.tensor(y_client3, dtype=torch.float32)
+    s_client3 = torch.from_numpy(s_client3.values).float()
+    y_potential_client3 = torch.tensor(y_potential_client3, dtype=torch.float32)
+
+    s_client4 = X_client4[sensitive_feature]
+    y_potential_client4 = y_client4
+    X_client4 = torch.tensor(X_client4.values, dtype=torch.float32)
+    y_client4 = torch.tensor(y_client4, dtype=torch.float32)
+    s_client4 = torch.from_numpy(s_client4.values).float()
+    y_potential_client4 = torch.tensor(y_potential_client4, dtype=torch.float32)
+
+    s_client5 = X_client5[sensitive_feature]
+    y_potential_client5 = y_client5
+    X_client5 = torch.tensor(X_client5.values, dtype=torch.float32)
+    y_client5 = torch.tensor(y_client5, dtype=torch.float32)
+    s_client5 = torch.from_numpy(s_client5.values).float()
+    y_potential_client5 = torch.tensor(y_potential_client5, dtype=torch.float32)
+
+    # Prepare test set
+    X_test = test_df.drop('class', axis=1)
+    y_test = LabelEncoder().fit_transform(test_df['class'])
+    sex_column = X_test[sensitive_feature]
+    column_names_list = X_test.columns.tolist()
+    ytest_potential = torch.tensor(y_test, dtype=torch.float32)
+    X_test = torch.tensor(X_test.values, dtype=torch.float32)
+    y_test = torch.tensor(y_test, dtype=torch.float32)
+    sex_list = sex_column.tolist()
+
+    # Aggregate clients
+    data_dict = {
+        "client_1": {"X": X_client1, "y": y_client1, "s": s_client1, "y_pot": y_potential_client1},
+        "client_2": {"X": X_client2, "y": y_client2, "s": s_client2, "y_pot": y_potential_client2},
+        "client_3": {"X": X_client3, "y": y_client3, "s": s_client3, "y_pot": y_potential_client3},
+        "client_4": {"X": X_client4, "y": y_client4, "s": s_client4, "y_pot": y_potential_client4},
+        "client_5": {"X": X_client5, "y": y_client5, "s": s_client5, "y_pot": y_potential_client5}
+    }
+
+    return data_dict, X_test, y_test, sex_list, column_names_list, ytest_potential
+
+
 
 def load_kdd_random(url, sensitive_feature, num_clients):
     """
@@ -304,5 +482,5 @@ def load_kdd_random(url, sensitive_feature, num_clients):
 
 
 if __name__ == "__main__":
-    a, _, _, _, _, _ = load_kdd_random("../Datasets/kdd.csv", "age", 5)
+    a, _, _, _, _, _ = load_kdd_random("../Datasets/kdd.csv", "age", 7)
     print(a)
