@@ -4,9 +4,9 @@ import numpy as np
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-#from psmpy import PsmPy
-#from psmpy.functions import cohenD
-#from psmpy.plotting import *
+from psmpy import PsmPy
+from psmpy.functions import cohenD
+from psmpy.plotting import *
 from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
 import zipfile
