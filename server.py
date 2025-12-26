@@ -29,6 +29,8 @@ class FLServer:
 
         self.global_lambda = 0.0 
 
+        self.device = device
+
     def broadcast_weights(self):
         """Returns the global model weights (on CPU) to be sent to clients."""
         return {k: v.cpu() for k, v in self.global_model.state_dict().items()}
@@ -40,12 +42,10 @@ class FLServer:
         Args:
             client_reports (list): List of dicts returned by clients.
             agg_strategy (func): Function that computes new weights.
-            strategy_context (dict): Helper data for the strategy.
         """
-        if strategy_context is None: strategy_context = {}
         
         #Execute Strategy to get new weights
-        new_weights = agg_strategy(client_reports, self.global_model, strategy_context)
+        new_weights = agg_strategy(client_reports, self.global_model, self.device)
         
         #Update Global Model
         self.global_model.load_state_dict(new_weights)
