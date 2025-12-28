@@ -1,13 +1,54 @@
 import torch
-import pandas as pd
-import numpy as np
-from sklearn.utils import shuffle
+from psmpy.plotting import *
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from psmpy import PsmPy
-from psmpy.functions import cohenD
-from psmpy.plotting import *
-from sklearn.neighbors import NearestNeighbors
+from sklearn.utils import shuffle
+
+
+def split_train_val_test(df, random_state=42):
+    """
+    Helper function to split a dataframe into train, validation, and test sets (70/15/15).
+
+    :param df: Dataframe to split
+    :param random_state: Random state to use
+    :return: Train, validation and test sets
+    """
+    train_df, temp_df = train_test_split(df, test_size=0.30, random_state=random_state)
+    val_df, test_df = train_test_split(temp_df, test_size=0.50, random_state=random_state)
+    return train_df, val_df, test_df
+
+
+def client_tensors(df_split, sensitive_feature, y_encoder=None):
+    """
+    Convert a split dataframe into tensors for FL.
+
+
+    :param df_split: Must contain 'income' + feature columns.
+    :param sensitive_feature: Column name inside X used as sensitive attribute.
+    :param y_encoder: If provided, used to transform income consistently.
+
+    :return X_t (torch.FloatTensor): shape (N, D)
+    :return y_t (torch.FloatTensor): shape (N,)
+    :return s_t (torch.FloatTensor): shape (N,)
+    :return y_pot_t (torch.FloatTensor): shape (N,) (currently same as y)
+    """
+    X = df_split.drop('income', axis=1)
+
+    if y_encoder is None:
+        y = LabelEncoder().fit_transform(df_split['income'])
+    else:
+        y = y_encoder.transform(df_split['income'])
+
+    s = X[sensitive_feature].to_numpy()
+    y_pot = y
+
+    X_t = torch.tensor(X.values, dtype=torch.float32)
+    y_t = torch.tensor(y, dtype=torch.float32)
+    s_t = torch.tensor(s, dtype=torch.float32)
+    y_pot_t = torch.tensor(y_pot, dtype=torch.float32)
+
+    return X_t, y_t, s_t, y_pot_t
+
 
 def load_adult(url):
     """
@@ -22,11 +63,11 @@ def load_adult(url):
         y (numpy.ndarray): Encoded target vector (income) where 0 and 1 represent income brackets.
     """
     data = pd.read_csv(url)
-    #data = shuffle(data)
-   
+    # data = shuffle(data)
 
     # Encode categorical columns
-    categorical_columns = ['workclass', 'education', 'marital.status', 'occupation', 'relationship', 'race', 'sex', 'native.country']
+    categorical_columns = ['workclass', 'education', 'marital.status', 'occupation', 'relationship', 'race', 'sex',
+                           'native.country']
     for col in categorical_columns:
         encoder = LabelEncoder()
         data[col] = encoder.fit_transform(data[col])
@@ -38,7 +79,7 @@ def load_adult(url):
     # Split the data into features and labels
     X = data.drop('income', axis=1)
     y = LabelEncoder().fit_transform(data['income'])
-    
+
     return X, y
 
 
@@ -72,110 +113,78 @@ def load_adult_age3(url, sensitive_feature):
     
     """
 
-    
     data = pd.read_csv(url)
-    #data = shuffle(data)
 
-    # Encode categorical columns
-    categorical_columns = ['workclass', 'education', 'marital.status', 'occupation', 'relationship', 'race', 'sex', 'native.country']
+    categorical_columns = [
+        'workclass', 'education', 'marital.status', 'occupation',
+        'relationship', 'race', 'sex', 'native.country'
+    ]
     for col in categorical_columns:
         encoder = LabelEncoder()
         data[col] = encoder.fit_transform(data[col])
-        
-    # Normalize numerical columns
+
     numerical_columns = ['fnlwgt', 'education.num', 'capital.gain', 'capital.loss', 'hours.per.week']
     scaler = StandardScaler()
     data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
-    data = shuffle(data)
-    
-    #train_df, test_df = train_test_split(data, test_size=0.2, random_state=42)
-    #data = train_df
-    mask = (data['age'] >=0) & (data['age'] <=29)
-    df1 = data[mask]
-    mask = (data['age'] >=30) & (data['age'] <=39)
-    df2 = data[mask]
-    mask = (data['age'] >=40)
-    df3 = data[mask]
-    df1 = df1.dropna()
-    df2 = df2.dropna()
-    df3 = df3.dropna()
-   
-    #scalrising the 'age' column as well
-    numerical_columns = ['age']
-    scaler = StandardScaler()
-    df1[numerical_columns] = scaler.fit_transform(df1[numerical_columns])
-    df2[numerical_columns] = scaler.fit_transform(df2[numerical_columns])
-    df3[numerical_columns] = scaler.fit_transform(df3[numerical_columns])
-    
-    
-    df1, test_df1 = train_test_split(df1, test_size=0.1, random_state=42)
-    df2, test_df2 = train_test_split(df2, test_size=0.1, random_state=42)
-    df3, test_df3 = train_test_split(df3, test_size=0.1, random_state=42)
-    # Split the data into features and labels
-    test_df = result = pd.concat([test_df1, test_df2, test_df3], ignore_index=True)
-    test_df[numerical_columns] = scaler.fit_transform(test_df[numerical_columns])
-    X_client1 = df1.drop('income', axis=1)
-    y_client1 = LabelEncoder().fit_transform(df1['income'])
-    
-    X_client2 = df2.drop('income', axis=1)
-    y_client2 = LabelEncoder().fit_transform(df2['income'])
-    
-    X_client3 = df3.drop('income', axis=1)
-    y_client3 = LabelEncoder().fit_transform(df3['income'])
-    
-    
-    
-    s_client1 = X_client1[sensitive_feature]
-    #y_potential_client1 = find_potential_outcomes(X_client1,y_client1, sensitive_feature)
-    y_potential_client1 =y_client1 
-    X_client1 = torch.tensor(X_client1.values, dtype=torch.float32)
-    y_client1 = torch.tensor(y_client1, dtype=torch.float32)
-    s_client1 = torch.from_numpy(s_client1.values).float()
-    y_potential_client1 = torch.tensor(y_potential_client1, dtype=torch.float32)
-   
-    
-    
-    
-    
-    s_client2 = X_client2[sensitive_feature]
-    #y_potential_client2 = find_potential_outcomes(X_client2,y_client2, sensitive_feature)
-    y_potential_client2 =y_client2 
-    X_client2 = torch.tensor(X_client2.values, dtype=torch.float32)
-    y_client2 = torch.tensor(y_client2, dtype=torch.float32)
-    s_client2 = torch.from_numpy(s_client2.values).float()
-    y_potential_client2 = torch.tensor(y_potential_client2, dtype=torch.float32)
-    
-    
-    s_client3 = X_client3[sensitive_feature]
-    #y_potential_client3 = find_potential_outcomes(X_client3,y_client3, sensitive_feature)
-    y_potential_client3 =y_client3 
-    X_client3 = torch.tensor(X_client3.values, dtype=torch.float32)
-    y_client3 = torch.tensor(y_client3, dtype=torch.float32)
-    s_client3 = torch.from_numpy(s_client3.values).float()
-    y_potential_client3 = torch.tensor(y_potential_client3, dtype=torch.float32)
-    
-    
-    
-    X_test = test_df.drop('income', axis=1)
-   
-    y_test = LabelEncoder().fit_transform(test_df['income'])
-    sex_column = X_test[sensitive_feature]
-    column_names_list = X_test.columns.tolist()
-    #ytest_potential = find_potential_outcomes(X_test,y_test, sensitive_feature)
-    ytest_potential =y_test 
-    ytest_potential = torch.tensor(ytest_potential, dtype=torch.float32)
-    X_test = torch.tensor(X_test.values, dtype=torch.float32)
-    y_test = torch.tensor(y_test, dtype=torch.float32)
-    
-    
+
+    data = shuffle(data, random_state=42).dropna()
+
+    df1 = data[(data['age'] >= 0) & (data['age'] <= 29)].copy()
+    df2 = data[(data['age'] >= 30) & (data['age'] <= 39)].copy()
+    df3 = data[(data['age'] >= 40)].copy()
+
+    age_scaler = StandardScaler()
+    for df in (df1, df2, df3):
+        df['age'] = age_scaler.fit_transform(df[['age']]).ravel().astype('float32')
+
+    df1_train, df1_val, df1_test = split_train_val_test(df1)
+    df2_train, df2_val, df2_test = split_train_val_test(df2)
+    df3_train, df3_val, df3_test = split_train_val_test(df3)
+
+    # Optional: consistent income encoding across all splits
+    y_encoder = LabelEncoder()
+    y_encoder.fit(data['income'])
+
+    # Train tensors
+    X1, y1, s1, ypot1 = client_tensors(df1_train, sensitive_feature, y_encoder)
+    X2, y2, s2, ypot2 = client_tensors(df2_train, sensitive_feature, y_encoder)
+    X3, y3, s3, ypot3 = client_tensors(df3_train, sensitive_feature, y_encoder)
+
+    # Global Val
+    val_df = pd.concat([df1_val, df2_val, df3_val], ignore_index=True)
+    X_val_df = val_df.drop('income', axis=1)
+    y_val_np = y_encoder.transform(val_df['income'])
+
+    s_val_column = X_val_df[sensitive_feature]
+    X_val = torch.tensor(X_val_df.values, dtype=torch.float32)
+    y_val = torch.tensor(y_val_np, dtype=torch.float32)
+    sval_list = s_val_column.tolist()
+    yval_potential = torch.tensor(y_val_np, dtype=torch.float32)
+
+    # Global Test
+    test_df = pd.concat([df1_test, df2_test, df3_test], ignore_index=True)
+    X_test_df = test_df.drop('income', axis=1)
+    y_test_np = y_encoder.transform(test_df['income'])
+
+    sex_column = X_test_df[sensitive_feature]
+    column_names_list = X_test_df.columns.tolist()
+
+    X_test = torch.tensor(X_test_df.values, dtype=torch.float32)
+    y_test = torch.tensor(y_test_np, dtype=torch.float32)
     sex_list = sex_column.tolist()
-    data_dict = {}
-    data_dict["client_1"] = {"X": X_client1, "y": y_client1, "s": s_client1, "y_pot": y_potential_client1}
-    data_dict["client_2"] = {"X": X_client2, "y": y_client2, "s": s_client2, "y_pot": y_potential_client2}
-    data_dict["client_3"] = {"X": X_client3, "y": y_client3, "s": s_client3, "y_pot": y_potential_client3}
-    #print("bismillah")
-    
-    return data_dict, X_test, y_test, sex_list, column_names_list,ytest_potential
+    ytest_potential = torch.tensor(y_test_np, dtype=torch.float32)
+
+    data_dict = {
+        "client_1": {"X": X1, "y": y1, "s": s1, "y_pot": ypot1},
+        "client_2": {"X": X2, "y": y2, "s": s2, "y_pot": ypot2},
+        "client_3": {"X": X3, "y": y3, "s": s3, "y_pot": ypot3},
+    }
+
+    return (
+        data_dict,
+        X_test, y_test, sex_list, column_names_list, ytest_potential,
+        X_val, y_val, sval_list, yval_potential
+    )
 
 
 def load_adult_age5(url, sensitive_feature):
@@ -208,144 +217,87 @@ def load_adult_age5(url, sensitive_feature):
     
     """
 
-    
     data = pd.read_csv(url)
-    #data = shuffle(data)
 
-    # Encode categorical columns
-    categorical_columns = ['workclass', 'education', 'marital.status', 'occupation', 'relationship', 'race', 'sex', 'native.country']
+    categorical_columns = [
+        'workclass', 'education', 'marital.status', 'occupation',
+        'relationship', 'race', 'sex', 'native.country'
+    ]
     for col in categorical_columns:
         encoder = LabelEncoder()
         data[col] = encoder.fit_transform(data[col])
-        
-    # Normalize numerical columns
+
     numerical_columns = ['fnlwgt', 'education.num', 'capital.gain', 'capital.loss', 'hours.per.week']
     scaler = StandardScaler()
     data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
-    data = shuffle(data)
-    
-    #train_df, test_df = train_test_split(data, test_size=0.2, random_state=42)
-    #data = train_df
-    mask = (data['age'] >=0) & (data['age'] <=30)
-    df1 = data[mask]
-    mask = (data['age'] >=31) & (data['age'] <=35)
-    df2 = data[mask]
-    mask = (data['age'] >=36) & (data['age'] <=45)
-    df3 = data[mask]
-    mask = (data['age'] >=46) & (data['age'] <=55)
-    df4 = data[mask]
-    mask = (data['age'] >=56)
-    df5 = data[mask]
-    df1 = df1.dropna()
-    df2 = df2.dropna()
-    df3 = df3.dropna()
-    df4 = df4.dropna()
-    df5 = df5.dropna()
-   
-    #scalrising the 'age' column as well
-    numerical_columns = ['age']
-    scaler = StandardScaler()
-    df1[numerical_columns] = scaler.fit_transform(df1[numerical_columns])
-    df2[numerical_columns] = scaler.fit_transform(df2[numerical_columns])
-    df3[numerical_columns] = scaler.fit_transform(df3[numerical_columns])
-    df4[numerical_columns] = scaler.fit_transform(df4[numerical_columns])
-    df5[numerical_columns] = scaler.fit_transform(df5[numerical_columns])
-    
-    
-    df1, test_df1 = train_test_split(df1, test_size=0.1, random_state=42)
-    df2, test_df2 = train_test_split(df2, test_size=0.1, random_state=42)
-    df3, test_df3 = train_test_split(df3, test_size=0.1, random_state=42)
-    df4, test_df4 = train_test_split(df4, test_size=0.1, random_state=42)
-    df5, test_df5 = train_test_split(df5, test_size=0.1, random_state=42)
-    # Split the data into features and labels
-    test_df = result = pd.concat([test_df1, test_df2, test_df3, test_df4, test_df5], ignore_index=True)
-    test_df[numerical_columns] = scaler.fit_transform(test_df[numerical_columns])
-    X_client1 = df1.drop('income', axis=1)
-    y_client1 = LabelEncoder().fit_transform(df1['income'])
-    
-    X_client2 = df2.drop('income', axis=1)
-    y_client2 = LabelEncoder().fit_transform(df2['income'])
-    
-    X_client3 = df3.drop('income', axis=1)
-    y_client3 = LabelEncoder().fit_transform(df3['income'])
 
-    X_client4 = df4.drop('income', axis=1)
-    y_client4 = LabelEncoder().fit_transform(df4['income'])
+    data = shuffle(data, random_state=42).dropna()
 
-    X_client5 = df5.drop('income', axis=1)
-    y_client5 = LabelEncoder().fit_transform(df5['income'])
-    
-    
-    
-    s_client1 = X_client1[sensitive_feature]
-    #y_potential_client1 = find_potential_outcomes(X_client1,y_client1, sensitive_feature)
-    y_potential_client1 =y_client1 
-    X_client1 = torch.tensor(X_client1.values, dtype=torch.float32)
-    y_client1 = torch.tensor(y_client1, dtype=torch.float32)
-    s_client1 = torch.from_numpy(s_client1.values).float()
-    y_potential_client1 = torch.tensor(y_potential_client1, dtype=torch.float32)
-   
-    
-    
-    
-    
-    s_client2 = X_client2[sensitive_feature]
-    #y_potential_client2 = find_potential_outcomes(X_client2,y_client2, sensitive_feature)
-    y_potential_client2 =y_client2 
-    X_client2 = torch.tensor(X_client2.values, dtype=torch.float32)
-    y_client2 = torch.tensor(y_client2, dtype=torch.float32)
-    s_client2 = torch.from_numpy(s_client2.values).float()
-    y_potential_client2 = torch.tensor(y_potential_client2, dtype=torch.float32)
-    
-    
-    s_client3 = X_client3[sensitive_feature]
-    #y_potential_client3 = find_potential_outcomes(X_client3,y_client3, sensitive_feature)
-    y_potential_client3 =y_client3 
-    X_client3 = torch.tensor(X_client3.values, dtype=torch.float32)
-    y_client3 = torch.tensor(y_client3, dtype=torch.float32)
-    s_client3 = torch.from_numpy(s_client3.values).float()
-    y_potential_client3 = torch.tensor(y_potential_client3, dtype=torch.float32)
+    df1 = data[(data['age'] >= 0) & (data['age'] <= 30)].copy()
+    df2 = data[(data['age'] >= 31) & (data['age'] <= 35)].copy()
+    df3 = data[(data['age'] >= 36) & (data['age'] <= 45)].copy()
+    df4 = data[(data['age'] >= 46) & (data['age'] <= 55)].copy()
+    df5 = data[(data['age'] >= 56)].copy()
 
-    s_client4 = X_client4[sensitive_feature]
-    #y_potential_client4 = find_potential_outcomes(X_client4,y_client4, sensitive_feature)
-    y_potential_client4 =y_client4
-    X_client4 = torch.tensor(X_client4.values, dtype=torch.float32)
-    y_client4 = torch.tensor(y_client4, dtype=torch.float32)
-    s_client4 = torch.from_numpy(s_client4.values).float()
-    y_potential_client4 = torch.tensor(y_potential_client4, dtype=torch.float32)
-    
-    s_client5 = X_client5[sensitive_feature]
-    #y_potential_client5 = find_potential_outcomes(X_client5,y_client5, sensitive_feature)
-    y_potential_client5 =y_client5
-    X_client5 = torch.tensor(X_client5.values, dtype=torch.float32)
-    y_client5 = torch.tensor(y_client5, dtype=torch.float32)
-    s_client5 = torch.from_numpy(s_client5.values).float()
-    y_potential_client5 = torch.tensor(y_potential_client5, dtype=torch.float32)
-    
-    
-    
-    X_test = test_df.drop('income', axis=1)
-   
-    y_test = LabelEncoder().fit_transform(test_df['income'])
-    sex_column = X_test[sensitive_feature]
-    column_names_list = X_test.columns.tolist()
-    #ytest_potential = find_potential_outcomes(X_test,y_test, sensitive_feature)
-    ytest_potential =y_test 
-    ytest_potential = torch.tensor(ytest_potential, dtype=torch.float32)
-    X_test = torch.tensor(X_test.values, dtype=torch.float32)
-    y_test = torch.tensor(y_test, dtype=torch.float32)
-    
-    
+    age_scaler = StandardScaler()
+    for df in (df1, df2, df3, df4, df5):
+        df['age'] = age_scaler.fit_transform(df[['age']]).ravel().astype('float32')
+
+    df1_train, df1_val, df1_test = split_train_val_test(df1)
+    df2_train, df2_val, df2_test = split_train_val_test(df2)
+    df3_train, df3_val, df3_test = split_train_val_test(df3)
+    df4_train, df4_val, df4_test = split_train_val_test(df4)
+    df5_train, df5_val, df5_test = split_train_val_test(df5)
+
+    # Consistent income encoding across all splits
+    y_encoder = LabelEncoder()
+    y_encoder.fit(data['income'])
+
+    # Train tensors
+    X1, y1, s1, ypot1 = client_tensors(df1_train, sensitive_feature, y_encoder)
+    X2, y2, s2, ypot2 = client_tensors(df2_train, sensitive_feature, y_encoder)
+    X3, y3, s3, ypot3 = client_tensors(df3_train, sensitive_feature, y_encoder)
+    X4, y4, s4, ypot4 = client_tensors(df4_train, sensitive_feature, y_encoder)
+    X5, y5, s5, ypot5 = client_tensors(df5_train, sensitive_feature, y_encoder)
+
+    # Global Val
+    val_df = pd.concat([df1_val, df2_val, df3_val, df4_val, df5_val], ignore_index=True)
+    X_val_df = val_df.drop('income', axis=1)
+    y_val_np = y_encoder.transform(val_df['income'])
+
+    s_val_column = X_val_df[sensitive_feature]
+    X_val = torch.tensor(X_val_df.values, dtype=torch.float32)
+    y_val = torch.tensor(y_val_np, dtype=torch.float32)
+    sval_list = s_val_column.tolist()
+    yval_potential = torch.tensor(y_val_np, dtype=torch.float32)
+
+    # Global Test
+    test_df = pd.concat([df1_test, df2_test, df3_test, df4_test, df5_test], ignore_index=True)
+    X_test_df = test_df.drop('income', axis=1)
+    y_test_np = y_encoder.transform(test_df['income'])
+
+    sex_column = X_test_df[sensitive_feature]
+    column_names_list = X_test_df.columns.tolist()
+
+    X_test = torch.tensor(X_test_df.values, dtype=torch.float32)
+    y_test = torch.tensor(y_test_np, dtype=torch.float32)
     sex_list = sex_column.tolist()
-    data_dict = {}
-    data_dict["client_1"] = {"X": X_client1, "y": y_client1, "s": s_client1, "y_pot": y_potential_client1}
-    data_dict["client_2"] = {"X": X_client2, "y": y_client2, "s": s_client2, "y_pot": y_potential_client2}
-    data_dict["client_3"] = {"X": X_client3, "y": y_client3, "s": s_client3, "y_pot": y_potential_client3}
-    data_dict["client_4"] = {"X": X_client4, "y": y_client4, "s": s_client4, "y_pot": y_potential_client4}
-    data_dict["client_5"] = {"X": X_client5, "y": y_client5, "s": s_client5, "y_pot": y_potential_client5}
-    #print("bismillah")
-    
-    return data_dict, X_test, y_test, sex_list, column_names_list,ytest_potential
+    ytest_potential = torch.tensor(y_test_np, dtype=torch.float32)
+
+    data_dict = {
+        "client_1": {"X": X1, "y": y1, "s": s1, "y_pot": ypot1},
+        "client_2": {"X": X2, "y": y2, "s": s2, "y_pot": ypot2},
+        "client_3": {"X": X3, "y": y3, "s": s3, "y_pot": ypot3},
+        "client_4": {"X": X4, "y": y4, "s": s4, "y_pot": ypot4},
+        "client_5": {"X": X5, "y": y5, "s": s5, "y_pot": ypot5},
+    }
+
+    return (
+        data_dict,
+        X_test, y_test, sex_list, column_names_list, ytest_potential,
+        X_val, y_val, sval_list, yval_potential
+    )
+
 
 def load_adult_random(url, sensitive_feature, num_clients):
     """
@@ -371,78 +323,74 @@ def load_adult_random(url, sensitive_feature, num_clients):
     ytest_potential : torch.Tensor
         Potential outcome labels for the combined test set.
     """
-    
+
     data = pd.read_csv(url)
 
-    # 1. Encode categorical columns
-    categorical_columns = ['workclass', 'education', 'marital.status', 'occupation', 'relationship', 'race', 'sex', 'native.country']
+    categorical_columns = [
+        'workclass', 'education', 'marital.status', 'occupation',
+        'relationship', 'race', 'sex', 'native.country'
+    ]
     for col in categorical_columns:
         encoder = LabelEncoder()
         data[col] = encoder.fit_transform(data[col])
-        
-    # 2. Normalize ALL numerical columns 
+
     numerical_columns = ['age', 'fnlwgt', 'education.num', 'capital.gain', 'capital.loss', 'hours.per.week']
     scaler = StandardScaler()
     data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
-    
-    # 3. Shuffle data
-    data = shuffle(data, random_state=42)
-    
-    # 4. Split data into N chunks
-    client_dfs = np.array_split(data, num_clients)
-    
-    data_dict = {}
-    test_dfs_list = []
-    
-    # 5. Process each client chunk
-    for i, df_chunk in enumerate(client_dfs):
-        client_name = f"client_{i+1}"
-        
-        df_chunk = df_chunk.dropna()
-        
-        
-        df_train, df_test = train_test_split(df_chunk, test_size=0.1, random_state=42)
-        
-        test_dfs_list.append(df_test)
-        
-        X_client = df_train.drop('income', axis=1)
-        y_client = LabelEncoder().fit_transform(df_train['income'])
-        
-        s_client = X_client[sensitive_feature]
-        
-        y_potential_client = y_client
-        
-        X_tensor = torch.tensor(X_client.values, dtype=torch.float32)
-        y_tensor = torch.tensor(y_client, dtype=torch.float32)
-        s_tensor = torch.from_numpy(s_client.values).float()
-        y_pot_tensor = torch.tensor(y_potential_client, dtype=torch.float32)
-        
-        data_dict[client_name] = {
-            "X": X_tensor, 
-            "y": y_tensor, 
-            "s": s_tensor, 
-            "y_pot": y_pot_tensor
-        }
 
-    # 6. Process Global Test Set
-    test_df = pd.concat(test_dfs_list, ignore_index=True)
-    
-    X_test = test_df.drop('income', axis=1)
-    y_test = LabelEncoder().fit_transform(test_df['income'])
-    
-    sex_column = X_test[sensitive_feature]
-    column_names_list = X_test.columns.tolist()
+    data = shuffle(data, random_state=42).dropna()
+
+    client_dfs = np.array_split(data, num_clients)
+
+    # Consistent income encoding across all splits
+    y_encoder = LabelEncoder()
+    y_encoder.fit(data['income'])
+
+    data_dict = {}
+    val_dfs = []
+    test_dfs = []
+
+    for i, df_chunk in enumerate(client_dfs, start=1):
+        df_train, df_val, df_test = split_train_val_test(df_chunk)
+
+        # Train tensors only
+        Xtr, ytr, str_, ypottr = client_tensors(df_train, sensitive_feature, y_encoder)
+        data_dict[f"client_{i}"] = {"X": Xtr, "y": ytr, "s": str_, "y_pot": ypottr}
+
+        val_dfs.append(df_val)
+        test_dfs.append(df_test)
+
+    # Global Val
+    val_df = pd.concat(val_dfs, ignore_index=True)
+    X_val_df = val_df.drop('income', axis=1)
+    y_val_np = y_encoder.transform(val_df['income'])
+
+    s_val_column = X_val_df[sensitive_feature]
+    X_val = torch.tensor(X_val_df.values, dtype=torch.float32)
+    y_val = torch.tensor(y_val_np, dtype=torch.float32)
+    sval_list = s_val_column.tolist()
+    yval_potential = torch.tensor(y_val_np, dtype=torch.float32)
+
+    # Global Test
+    test_df = pd.concat(test_dfs, ignore_index=True)
+    X_test_df = test_df.drop('income', axis=1)
+    y_test_np = y_encoder.transform(test_df['income'])
+
+    sex_column = X_test_df[sensitive_feature]
+    column_names_list = X_test_df.columns.tolist()
+
+    X_test = torch.tensor(X_test_df.values, dtype=torch.float32)
+    y_test = torch.tensor(y_test_np, dtype=torch.float32)
     sex_list = sex_column.tolist()
-    
-    ytest_potential = y_test
-    ytest_potential_tensor = torch.tensor(ytest_potential, dtype=torch.float32)
-    X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
-    y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
-    
-    return data_dict, X_test_tensor, y_test_tensor, sex_list, column_names_list, ytest_potential_tensor
+    ytest_potential = torch.tensor(y_test_np, dtype=torch.float32)
+
+    return (
+        data_dict,
+        X_test, y_test, sex_list, column_names_list, ytest_potential,
+        X_val, y_val, sval_list, yval_potential
+    )
 
 
 if __name__ == "__main__":
-    a, _,_,_,_,_ = load_adult_age5("../Datasets/adult.csv", "sex")
+    a, _, _, _, _, _ = load_adult_age5("../Datasets/adult.csv", "sex")
     print(a)
-

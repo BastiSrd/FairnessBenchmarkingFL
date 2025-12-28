@@ -9,7 +9,7 @@ import lossStrategies
 ALGORITHM = 'FedAvg'  # Options: 'FedAvg', 'FedMinMax', 'TrustFed', 'Fairness' / only FedAvg currently implemented
 LOADER = '3_clients'     # Options: '3_clients', '5_clients', 'random'
 ROUNDS = 10
-CLIENT_EPOCHS = 5
+CLIENT_EPOCHS = 3
 LR = 0.01
 
 def runFLSimulation():
@@ -18,7 +18,7 @@ def runFLSimulation():
     #Load Data
     print("Loading data...")
     if LOADER == '3_clients':
-        data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_age3("./Datasets/adult.csv", "sex") # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_age3("./Datasets/adult.csv", "sex") # replace function if other Dataset wanted
     elif LOADER == '5_clients':
         data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_age5() # replace function if other Dataset wanted
     elif LOADER == 'random':
