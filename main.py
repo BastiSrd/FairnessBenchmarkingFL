@@ -75,7 +75,9 @@ def runFLSimulation():
 
         #Evaluate
         metrics = server.evaluate()
-        print(f"Results Round {r+1}: Acc: {metrics['Accuracy']:.4f}")
+        print(f"Round {r+1} | Acc: {metrics['Accuracy']:.4f} | "
+              f"SP: {metrics['Statistical_Parity']:.4f} | "
+              f"EO: {metrics['Equalized_Odds']:.4f}")
 
 if __name__ == "__main__":
     runFLSimulation()
