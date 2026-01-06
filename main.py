@@ -1,16 +1,16 @@
 import torch
 import numpy as np
 import DatasetLoader.load_adult_data, DatasetLoader.load_acs_data, DatasetLoader.load_bank_data, DatasetLoader.load_kdd_data, DatasetLoader.load_cac_data
-from client import FLClient
-from server import FLServer
+from FedAvg.FedAvgClient import FedAvgClient
+from FedAvg.FedAvgServer import FedAvgServer
 from logger import FLLogger
-import lossStrategies
+from FedAvg.FedAvgLossStrategies import loss_standard, agg_fedavg
 
 # --- Configuration ---
 ALGORITHM = 'FedAvg'  # Options: 'FedAvg', 'FedMinMax', 'TrustFed', 'Fairness' / only FedAvg currently implemented
 LOADER = '3_clients'     # Options: '3_clients', '5_clients', 'random'
-ROUNDS = 10
-CLIENT_EPOCHS = 5
+ROUNDS = 5
+CLIENT_EPOCHS = 3
 LR = 0.01
 
 def runFLSimulation():
@@ -42,23 +42,23 @@ def runFLSimulation():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")
 
-    #Setup Strategies based on ALGORITHM
+
+    #Setup Strategies and FL Environment based on ALGORITHM
     if ALGORITHM == 'FedAvg':
-        client_loss = lossStrategies.loss_standard
-        server_agg  = lossStrategies.agg_fedavg
-        
+        client_loss = loss_standard
+        server_agg  = agg_fedavg
+        server = FedAvgServer((X_test, y_test, s_list), input_dim, device)
+        clients = []
+        for c_name, c_data in data_dict.items():
+            clients.append(FedAvgClient(c_name, c_data, input_dim, device))
+        print(f"Initialized {len(clients)} clients.")
+
+        runFedAvgSimulationLoop(server,clients,logger,client_loss,server_agg)
     else:
         raise ValueError(f"Unknown Algorithm: {ALGORITHM}")
 
-    #Initialize Server and Clients
-    server = FLServer((X_test, y_test, s_list), input_dim, device)
-    
-    clients = []
-    for c_name, c_data in data_dict.items():
-        clients.append(FLClient(c_name, c_data, input_dim, device))
-        
-    print(f"Initialized {len(clients)} clients.")
 
+def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
     #Track best round per metric
     best_acc_value = -1.0
     best_round_acc = -1
@@ -122,14 +122,13 @@ def runFLSimulation():
     "Accuracy": {"round": best_round_acc, "value": best_acc_value},
     "Statistical_Parity": {"round": best_round_sp, "value": best_sp_value},
     "Equalized_Odds": {"round": best_round_eo, "value": best_eo_value}
-}
+    }
     logger.finalize()
 
     #Summary
     print("\nBest Rounds Summary:")
     for metric, info in logger.best_metrics.items():
         print(f"{metric}: Round {info['round']} | Value: {info['value']:.4f}")
-    
 
 
 if __name__ == "__main__":

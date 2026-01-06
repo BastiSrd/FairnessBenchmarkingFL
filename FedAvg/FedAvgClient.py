@@ -3,22 +3,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
+from models import simpleModel
 
-class simpleModel(nn.Module):
-    def __init__(self, input_dim):
-        super(simpleModel, self).__init__()
-        self.layer1 = nn.Linear(input_dim, 64)
-        self.relu = nn.ReLU()
-        
-        self.layer2 = nn.Linear(64, 1)
-        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        x = self.relu(self.layer1(x))
-        x = self.sigmoid(self.layer2(x))
-        return x
-
-class FLClient:
+class FedAvgClient:
     def __init__(self, client_name, data_dict, input_dim, device='cuda'):
         """
         Args:
