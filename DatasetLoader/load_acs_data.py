@@ -1,370 +1,286 @@
-import torch
-import pandas as pd
 import numpy as np
-from sklearn.utils import shuffle
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from psmpy import PsmPy
-from psmpy.functions import cohenD
-from psmpy.plotting import *
-from sklearn.neighbors import NearestNeighbors
-from collections import defaultdict
+import pandas as pd
+import torch
 
-STATES_LIST = [
-    'al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga',
-    'hi', 'id', 'il', 'in', 'ia', 'ks', 'ky', 'la', 'me', 'md',
-    'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv', 'nh', 'nj',
-    'nm', 'ny', 'nc', 'nd', 'oh', 'ok', 'or', 'pa', 'ri', 'sc',
-    'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy'
-]
+from loader import (
+    DEFAULT_RANDOM_STATE,
+    ACS_STATES_LIST,
+    split_train_val_test,
+    shuffle_dropna,
+    fit_label_encoders,
+    transform_with_label_encoders,
+    fit_standard_scaler,
+    transform_with_scaler,
+    fit_y_encoder,
+    make_federated_dict,
+    make_global_split_tensors,
+    make_state_groups,
+)
+
+ACS_CATEGORICAL_COLUMNS = ["AGEP", "COW", "SCHL", "MAR", "RELP", "SEX", "STATE_ID"]
+ACS_NUMERICAL_COLUMNS = ["OCCP", "POBP", "WKHP"]
+
+ACS_TARGET_COL = "PINCP"
+ACS_DEFAULT_SENSITIVE = "RAC1P"
 
 
-def loadAndPreprocessACS():
+def load_acs(dataset_dir: str = "../Datasets/acs_dataset"):
     """
-    Internal helper:
-    1. Loads all 50 state CSVs.
-    2. Merges them into one DataFrame (keeping track of the 'State' source).
-    3. Encodes Categorical variables (globally to ensure consistency).
-    4. Normalizes Numerical variables (globally).
-    """
-    dfs = []
-    for state in STATES_LIST:
-        try:
-            df = pd.read_csv(f'../Datasets/acs_dataset/{state}_data.csv')
-            # Track state for splitting later
-            df['STATE_ID'] = state 
-            dfs.append(df)
-        except FileNotFoundError:
-            print(f"Warning: File for {state} not found. Skipping.")
-            continue
-            
-    if not dfs:
-        raise ValueError("No data files found.")
-
-    data = pd.concat(dfs, ignore_index=True)
-    
-    # 1. Pre-process Sensitive Attribute (RAC1P)
-    #    Target: 1 if White (1), 0 otherwise
-    if 'RAC1P' in data.columns:
-        data['RAC1P'] = data['RAC1P'].apply(lambda x: 1 if x == 1 else 0)
-
-    # 2. Encode Categorical Columns
-    #    Note: 'AGEP' is numerical here, unlike original Adult dataset
-    categorical_columns = ['AGEP', 'COW', 'SCHL', 'MAR', 'RELP', 'SEX', 'STATE_ID'] 
-    numerical_columns = ['OCCP', 'POBP', 'WKHP']
-    
-    # We fit encoders on the WHOLE dataset so 'CA' is always encoded to the same int
-    for col in categorical_columns:
-        if col in data.columns:
-            encoder = LabelEncoder()
-            data[col] = encoder.fit_transform(data[col])
-
-    # 3. Normalize Numerical Columns
-    scaler = StandardScaler()
-    data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
-
-    return data, numerical_columns, scaler
-
-def load_acs():
-    """
-    Loads and processes ACS Income data from state-level CSVs into a federated PyTorch format.
-
-    Inputs:
-        None (Reads .csv files from the './acs_dataset/' directory).
-
-    Returns
-    -------
-    data_dict : dict
-        Maps 'client_i' to a dict of torch.Tensor objects {X, y, s, y_pot} per state.
-    X_test : torch.Tensor
-        Combined and normalized test features from all states.
-    y_test : torch.Tensor
-        Combined binary income labels (1 if >$50k, 0 otherwise).
-    sex_list : list
-        Sensitive feature values (RAC1P) for the combined test set.
-    column_names_list : list
-        List of feature strings included in the tensors.
-    y_pot : torch.Tensor
-        A zero-filled placeholder tensor for potential outcome logic.
-    """
-    #states = ['ca', 'il', 'ny', 'tx', 'fl', 'pa', 'oh', 'mi', 'ga', 'nc'] #10 states
-     #all states
-    states = [
-    'al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga',
-    'hi', 'id', 'il', 'in', 'ia', 'ks', 'ky', 'la', 'me', 'md',
-    'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv', 'nh', 'nj',
-    'nm', 'ny', 'nc', 'nd', 'oh', 'ok', 'or', 'pa', 'ri', 'sc',
-    'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy'
-    ]
-    
-    categorical_columns = ['AGEP', 'COW', 'SCHL', 'MAR', 'RELP', 'SEX']
-    numerical_columns = ['OCCP', 'POBP', 'WKHP']
-    sensitive_feature = 'RAC1P'
-    data_dict = defaultdict(list)
-    scaler = StandardScaler()
-    test_dfs = defaultdict(list)
-    client_num = 1
-    for state in states:
-        data = pd.read_csv(f'../Datasets/acs_dataset/{state}_data.csv')
-        data['RAC1P'] = data['RAC1P'].apply(lambda x: 1 if x == 1 else 0)
-        for col in categorical_columns:
-            encoder = LabelEncoder()
-            data[col] = encoder.fit_transform(data[col])
-        # Normalize numerical columns
-        data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
-        data, test_df = train_test_split(data, test_size=0.1, random_state=42)
-        client_name = "client_"+str(client_num)
-        test_dfs[client_name]=test_df
-        
-        # Split the data into features and labels
-        X_client = data.drop('PINCP', axis=1)
-        y_client = LabelEncoder().fit_transform(data['PINCP'])
-        s_client = X_client[sensitive_feature]
-        #y_potential_client1 = find_potential_outcomes(X_client1,y_client1, sensitive_feature)
-        X_client = torch.tensor(X_client.values, dtype=torch.float32)
-        y_client = torch.tensor(y_client, dtype=torch.float32)
-        s_client = torch.from_numpy(s_client.values).float()
-        #y_potential_client1 = torch.tensor(y_potential_client1, dtype=torch.float32)
-        y_pot = torch.zeros_like(y_client)
-        update_data = {"X": X_client, "y": y_client, "s": s_client, "y_pot": y_pot}
-        data_dict[client_name]=update_data
-        client_num +=1
-    
-    # Concatenate the dataframes into a single dataframe
-    test_df = pd.concat(test_dfs.values(), ignore_index=True)
-    test_df[numerical_columns] = scaler.fit_transform(test_df[numerical_columns])
-    X_test = test_df.drop('PINCP', axis=1)
-    y_test = LabelEncoder().fit_transform(test_df['PINCP'])
-    sex_column = X_test[sensitive_feature]
-    sex_list = sex_column.tolist()
-    column_names_list = X_test.columns.tolist()
-    #ytest_potential = find_potential_outcomes(X_test,y_test, sensitive_feature)
-    #ytest_potential = torch.tensor(ytest_potential, dtype=torch.float32)
-    X_test = torch.tensor(X_test.values, dtype=torch.float32)
-    y_test = torch.tensor(y_test, dtype=torch.float32)
-    y_pot = torch.zeros_like(y_test)
-    
-    return data_dict, X_test, y_test, sex_list, column_names_list,y_pot
-
-def load_acs_states_3(sensitive_feature='RAC1P'):
-    """
-    Loads and processes ACS Income data from state-level CSVs into a federated PyTorch format.
-    The data is split for 3 clients splitting the 50 states across 3 clients randomly.
-    Data for each state is not split, meaning every state is specific to one client
-
-    Returns
-    -------
-    data_dict : dict
-        Maps 'client_i' to a dict of torch.Tensor objects {X, y, s, y_pot} per state.
-    X_test : torch.Tensor
-        Combined and normalized test features from all states.
-    y_test : torch.Tensor
-        Combined binary income labels (1 if >$50k, 0 otherwise).
-    sex_list : list
-        Sensitive feature values (RAC1P) for the combined test set.
-    column_names_list : list
-        List of feature strings included in the tensors.
-    y_pot : torch.Tensor
-        A zero-filled placeholder tensor for potential outcome logic.
-    """
-    data, numerical_columns, scaler = loadAndPreprocessACS()
-    
-    unique_states = data['STATE_ID'].unique()
-    np.random.seed(42)
-    np.random.shuffle(unique_states)
-    
-    state_groups = np.array_split(unique_states, 3)
-    
-    df1 = data[data['STATE_ID'].isin(state_groups[0])].copy()
-    df2 = data[data['STATE_ID'].isin(state_groups[1])].copy()
-    df3 = data[data['STATE_ID'].isin(state_groups[2])].copy()
-    
-    df1, test_df1 = train_test_split(df1, test_size=0.1, random_state=42)
-    df2, test_df2 = train_test_split(df2, test_size=0.1, random_state=42)
-    df3, test_df3 = train_test_split(df3, test_size=0.1, random_state=42)
-
-    test_df = pd.concat([test_df1, test_df2, test_df3], ignore_index=True)
-    
-    test_df[numerical_columns] = scaler.fit_transform(test_df[numerical_columns])
-    
-    clients = [df1, df2, df3]
-    data_dict = {}
-    
-    for i, df in enumerate(clients):
-        client_name = f"client_{i+1}"
-        df_clean = df.drop(['PINCP', 'STATE_ID'], axis=1)
-        
-        y_cl = LabelEncoder().fit_transform(df['PINCP'])
-        s_cl = df_clean[sensitive_feature]
-        
-        X_tensor = torch.tensor(df_clean.values, dtype=torch.float32)
-        y_tensor = torch.tensor(y_cl, dtype=torch.float32)
-        s_tensor = torch.from_numpy(s_cl.values).float()
-        y_pot = torch.zeros_like(y_tensor)
-        
-        data_dict[client_name] = {"X": X_tensor, "y": y_tensor, "s": s_tensor, "y_pot": y_pot}
-
-    X_test = test_df.drop(['PINCP', 'STATE_ID'], axis=1)
-    y_test = LabelEncoder().fit_transform(test_df['PINCP'])
-    sex_list = X_test[sensitive_feature].tolist()
-    col_names = X_test.columns.tolist()
-    
-    X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
-    y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
-    y_pot_test = torch.zeros_like(y_test_tensor)
-    
-    return data_dict, X_test_tensor, y_test_tensor, sex_list, col_names, y_pot_test
-
-
-def load_acs_states_5(sensitive_feature='RAC1P'):
-    """
-    Loads and processes ACS Income data from state-level CSVs into a federated PyTorch format.
-    The data is split for 5 clients splitting the 50 states across 5 clients randomly.
-    Data for each state is not split, meaning every state is specific to one client
-
-    Returns
-    -------
-    data_dict : dict
-        Maps 'client_i' to a dict of torch.Tensor objects {X, y, s, y_pot} per state.
-    X_test : torch.Tensor
-        Combined and normalized test features from all states.
-    y_test : torch.Tensor
-        Combined binary income labels (1 if >$50k, 0 otherwise).
-    sex_list : list
-        Sensitive feature values (RAC1P) for the combined test set.
-    column_names_list : list
-        List of feature strings included in the tensors.
-    y_pot : torch.Tensor
-        A zero-filled placeholder tensor for potential outcome logic.
-    """
-    data, numerical_columns, scaler = loadAndPreprocessACS()
-    
-    unique_states = data['STATE_ID'].unique()
-    np.random.seed(42)
-    np.random.shuffle(unique_states)
-    
-    state_groups = np.array_split(unique_states, 5)
-    
-    df1 = data[data['STATE_ID'].isin(state_groups[0])].copy()
-    df2 = data[data['STATE_ID'].isin(state_groups[1])].copy()
-    df3 = data[data['STATE_ID'].isin(state_groups[2])].copy()
-    df4 = data[data['STATE_ID'].isin(state_groups[3])].copy()
-    df5 = data[data['STATE_ID'].isin(state_groups[4])].copy()
-    
-    
-    
-    df1, test_df1 = train_test_split(df1, test_size=0.1, random_state=42)
-    df2, test_df2 = train_test_split(df2, test_size=0.1, random_state=42)
-    df3, test_df3 = train_test_split(df3, test_size=0.1, random_state=42)
-    df4, test_df4 = train_test_split(df4, test_size=0.1, random_state=42)
-    df5, test_df5 = train_test_split(df5, test_size=0.1, random_state=42)
-
-    test_df = pd.concat([test_df1, test_df2, test_df3, test_df4, test_df5], ignore_index=True)
-    
-    test_df[numerical_columns] = scaler.fit_transform(test_df[numerical_columns])
-    
-    clients = [df1, df2, df3,df4,df5]
-    data_dict = {}
-    
-    for i, df in enumerate(clients):
-        client_name = f"client_{i+1}"
-        df_clean = df.drop(['PINCP', 'STATE_ID'], axis=1)
-        
-        y_cl = LabelEncoder().fit_transform(df['PINCP'])
-        s_cl = df_clean[sensitive_feature]
-        
-        X_tensor = torch.tensor(df_clean.values, dtype=torch.float32)
-        y_tensor = torch.tensor(y_cl, dtype=torch.float32)
-        s_tensor = torch.from_numpy(s_cl.values).float()
-        y_pot = torch.zeros_like(y_tensor)
-        
-        data_dict[client_name] = {"X": X_tensor, "y": y_tensor, "s": s_tensor, "y_pot": y_pot}
-
-    X_test = test_df.drop(['PINCP', 'STATE_ID'], axis=1)
-    y_test = LabelEncoder().fit_transform(test_df['PINCP'])
-    sex_list = X_test[sensitive_feature].tolist()
-    col_names = X_test.columns.tolist()
-    
-    X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
-    y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
-    y_pot_test = torch.zeros_like(y_test_tensor)
-    
-    return data_dict, X_test_tensor, y_test_tensor, sex_list, col_names, y_pot_test
-
-def load_acs_random(sensitive_feature='RAC1P', num_clients=10):
-    """
-    Loads and processes ACS Income data from state-level CSVs into a federated PyTorch format.
-    The data is split for N clients in an IID way by randomly splitting the data while breaking up the
-    structure of the states.
+    Loads all state CSVs, merges them into one DataFrame, and applies global preprocessing
 
     Args:
-        url (str): Path or URL to the raw Adult dataset CSV.
-        sensitive_feature (str): Column name used for fairness grouping (e.g., 'race' or 'sex').
+        dataset_dir (str): Folder containing {state}_data.csv files.
+
+    Returns:
+        data (pd.DataFrame): preprocessed merged dataset (includes STATE_ID + target PINCP)
+    """
+
+    dfs = []
+    for state in ACS_STATES_LIST:
+        path = f"{dataset_dir}/{state}_data.csv"
+        try:
+            df = pd.read_csv(path)
+            df["STATE_ID"] = state
+            dfs.append(df)
+        except FileNotFoundError:
+            print(f"Warning: File for {state} not found at {path}. Skipping.")
+            continue
+
+    if not dfs:
+        raise ValueError("No ACS state CSV files found. Check dataset_dir path.")
+
+    data = pd.concat(dfs, ignore_index=True)
+
+    if ACS_DEFAULT_SENSITIVE in data.columns:
+        data[ACS_DEFAULT_SENSITIVE] = data[ACS_DEFAULT_SENSITIVE].apply(lambda x: 1 if x == 1 else 0)
+
+    # Global categorical encoding
+    cat_encoders = fit_label_encoders(data, ACS_CATEGORICAL_COLUMNS)
+    data = transform_with_label_encoders(data, cat_encoders)
+
+    # Global numerical scaling
+    scaler = fit_standard_scaler(data, ACS_NUMERICAL_COLUMNS)
+    data = transform_with_scaler(data, scaler, ACS_NUMERICAL_COLUMNS)
+
+    return data
+
+
+def load_acs_random(
+    sensitive_feature: str = ACS_DEFAULT_SENSITIVE,
+    num_clients: int = 10,
+    dataset_dir: str = "../Datasets/acs_dataset",
+):
+    """
+    Loads ACS and partitions it into N randomly split clients for federated learning (IID-like).
+
+    Args:
+        sensitive_feature (str): Column used for fairness grouping (default: 'RAC1P')
+        num_clients (int): Number of clients
+        dataset_dir (str): Folder containing {state}_data.csv files
 
     Returns
     -------
     data_dict : dict
-        Maps 'client_i' to a dict of torch.Tensor objects {X, y, s, y_pot} per state.
+        Maps 'client_1'..'client_N' to tensors {X, y, s, y_pot}.
     X_test : torch.Tensor
-        Combined and normalized test features from all states.
+        Combined test features from all clients.
     y_test : torch.Tensor
-        Combined binary income labels (1 if >$50k, 0 otherwise).
+        Combined labels for the test set.
     sex_list : list
-        Sensitive feature values (RAC1P) for the combined test set.
+        Sensitive feature values extracted from the combined test set.
     column_names_list : list
-        List of feature strings included in the tensors.
-    y_pot : torch.Tensor
-        A zero-filled placeholder tensor for potential outcome logic.
+        Feature column names.
+    ytest_potential : torch.Tensor
+        Potential outcome labels (here: equals y).
+    X_val, y_val, sval_list, yval_potential : validation equivalents (global, combined).
     """
-        
-    data, numerical_columns, scaler = loadAndPreprocessACS()
-    
-    data = data.drop('STATE_ID', axis=1)
-    
-    data = shuffle(data, random_state=42)
-    
+    data = load_acs(dataset_dir=dataset_dir)
+
+    # For random split we drop STATE_ID from features
+    data = data.drop("STATE_ID", axis=1)
+
+    data = shuffle_dropna(data, random_state=DEFAULT_RANDOM_STATE)
+
+    # global y encoder
+    y_encoder = fit_y_encoder(data[ACS_TARGET_COL])
+
+    # split into N chunks
     client_dfs = np.array_split(data, num_clients)
-    
-    data_dict = {}
-    test_dfs_list = []
-    
-    for i, df_chunk in enumerate(client_dfs):
-        client_name = f"client_{i+1}"
-        
-        df_train, df_test = train_test_split(df_chunk, test_size=0.1, random_state=42)
-        test_dfs_list.append(df_test)
-        
-        X_cl = df_train.drop('PINCP', axis=1)
-        y_cl = LabelEncoder().fit_transform(df_train['PINCP'])
-        s_cl = X_cl[sensitive_feature]
-        
-        X_tensor = torch.tensor(X_cl.values, dtype=torch.float32)
-        y_tensor = torch.tensor(y_cl, dtype=torch.float32)
-        s_tensor = torch.from_numpy(s_cl.values).float()
-        y_pot = torch.zeros_like(y_tensor)
-        
-        data_dict[client_name] = {"X": X_tensor, "y": y_tensor, "s": s_tensor, "y_pot": y_pot}
-        
-    test_df = pd.concat(test_dfs_list, ignore_index=True)
-    test_df[numerical_columns] = scaler.fit_transform(test_df[numerical_columns])
-    
-    X_test = test_df.drop('PINCP', axis=1)
-    y_test = LabelEncoder().fit_transform(test_df['PINCP'])
-    sex_list = X_test[sensitive_feature].tolist()
-    col_names = X_test.columns.tolist()
-    
-    X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32)
-    y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
-    y_pot_test = torch.zeros_like(y_test_tensor)
-    
-    return data_dict, X_test_tensor, y_test_tensor, sex_list, col_names, y_pot_test
+
+    train_dfs, val_dfs, test_dfs = [], [], []
+    for df_chunk in client_dfs:
+        df_train, df_val, df_test = split_train_val_test(df_chunk, random_state=DEFAULT_RANDOM_STATE)
+        train_dfs.append(df_train)
+        val_dfs.append(df_val)
+        test_dfs.append(df_test)
+
+    client_names = [f"client_{i}" for i in range(1, num_clients + 1)]
+    data_dict = make_federated_dict(
+        client_names,
+        train_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+
+    # Global Val/Test
+    X_val, y_val, sval_list, _val_feature_names, yval_potential = make_global_split_tensors(
+        val_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+    X_test, y_test, sex_list, column_names_list, ytest_potential = make_global_split_tensors(
+        test_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+
+    return (
+        data_dict,
+        X_test, y_test, sex_list, column_names_list, ytest_potential,
+        X_val, y_val, sval_list, yval_potential,
+    )
+
+
+def load_acs_states_3(
+    sensitive_feature: str = ACS_DEFAULT_SENSITIVE,
+    dataset_dir: str = "../Datasets/acs_dataset",
+):
+    """
+    Loads ACS and partitions it into 3 clients by grouping states (non-IID by state).
+
+    Returns (Adult-style):
+      (data_dict,
+       X_test, y_test, sex_list, column_names_list, ytest_potential,
+       X_val, y_val, sval_list, yval_potential)
+    """
+    data = load_acs(dataset_dir=dataset_dir)
+    data = shuffle_dropna(data, random_state=DEFAULT_RANDOM_STATE)
+
+    # Determine state groups deterministically
+    unique_states = data["STATE_ID"].unique().tolist()
+    state_groups = make_state_groups(unique_states, num_clients=3, seed=DEFAULT_RANDOM_STATE, shuffle_states=True)
+
+    # Build 3 client dfs by state membership
+    client_raw = [
+        data[data["STATE_ID"].isin(state_groups[0])].copy(),
+        data[data["STATE_ID"].isin(state_groups[1])].copy(),
+        data[data["STATE_ID"].isin(state_groups[2])].copy(),
+    ]
+
+    # global y encoder
+    y_encoder = fit_y_encoder(data[ACS_TARGET_COL])
+
+    train_dfs, val_dfs, test_dfs = [], [], []
+    for dfc in client_raw:
+        df_train, df_val, df_test = split_train_val_test(dfc, random_state=DEFAULT_RANDOM_STATE)
+
+        # Drop STATE_ID after splitting
+        train_dfs.append(df_train.drop(["STATE_ID"], axis=1))
+        val_dfs.append(df_val.drop(["STATE_ID"], axis=1))
+        test_dfs.append(df_test.drop(["STATE_ID"], axis=1))
+
+    client_names = ["client_1", "client_2", "client_3"]
+    data_dict = make_federated_dict(
+        client_names,
+        train_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+
+    X_val, y_val, sval_list, _val_feature_names, yval_potential = make_global_split_tensors(
+        val_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+    X_test, y_test, sex_list, column_names_list, ytest_potential = make_global_split_tensors(
+        test_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+
+    return (
+        data_dict,
+        X_test, y_test, sex_list, column_names_list, ytest_potential,
+        X_val, y_val, sval_list, yval_potential,
+    )
+
+
+def load_acs_states_5(
+    sensitive_feature: str = ACS_DEFAULT_SENSITIVE,
+    dataset_dir: str = "../Datasets/acs_dataset",
+):
+    """
+    Loads ACS and partitions it into 5 clients by grouping states (non-IID by state).
+
+    Returns (Adult-style):
+      (data_dict,
+       X_test, y_test, sex_list, column_names_list, ytest_potential,
+       X_val, y_val, sval_list, yval_potential)
+    """
+    data = load_acs(dataset_dir=dataset_dir)
+    data = shuffle_dropna(data, random_state=DEFAULT_RANDOM_STATE)
+
+    unique_states = data["STATE_ID"].unique().tolist()
+    state_groups = make_state_groups(unique_states, num_clients=5, seed=DEFAULT_RANDOM_STATE, shuffle_states=True)
+
+    client_raw = [
+        data[data["STATE_ID"].isin(state_groups[i])].copy()
+        for i in range(5)
+    ]
+
+    y_encoder = fit_y_encoder(data[ACS_TARGET_COL])
+
+    train_dfs, val_dfs, test_dfs = [], [], []
+    for dfc in client_raw:
+        df_train, df_val, df_test = split_train_val_test(dfc, random_state=DEFAULT_RANDOM_STATE)
+        train_dfs.append(df_train.drop(["STATE_ID"], axis=1))
+        val_dfs.append(df_val.drop(["STATE_ID"], axis=1))
+        test_dfs.append(df_test.drop(["STATE_ID"], axis=1))
+
+    client_names = [f"client_{i}" for i in range(1, 6)]
+    data_dict = make_federated_dict(
+        client_names,
+        train_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+
+    X_val, y_val, sval_list, _val_feature_names, yval_potential = make_global_split_tensors(
+        val_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+    X_test, y_test, sex_list, column_names_list, ytest_potential = make_global_split_tensors(
+        test_dfs,
+        target_col=ACS_TARGET_COL,
+        sensitive_feature=sensitive_feature,
+        y_encoder=y_encoder,
+        task="classification",
+    )
+
+    return (
+        data_dict,
+        X_test, y_test, sex_list, column_names_list, ytest_potential,
+        X_val, y_val, sval_list, yval_potential,
+    )
+
 
 if __name__ == "__main__":
-    print("Testing load_acs_states_3...")
-    data_dict, X_test, y_test, _, _, _ = load_acs_states_3()
-    print(f"Client 1 (State Group 1) Size: {data_dict['client_1']['X'].shape}")
-    print(f"Client 2 (State Group 2) Size: {data_dict['client_2']['X'].shape}")
-    print(f"Client 3 (State Group 3) Size: {data_dict['client_3']['X'].shape}")
-    print(f"Global Test Set Size: {X_test.shape}")
-
-    
+    dd, X_test, y_test, s_test, cols, ypot_test, X_val, y_val, s_val, ypot_val = load_acs_states_3()
+    print(dd["client_1"]["X"].shape, X_test.shape, X_val.shape)
