@@ -1,6 +1,7 @@
 import torch
 import numpy as np
-import DatasetLoader.load_adult_data, DatasetLoader.load_acs_data, DatasetLoader.load_bank_data, DatasetLoader.load_kdd_data, DatasetLoader.load_cac_data
+import DatasetLoader
+from DatasetLoader import load_adult_data, load_acs_data
 from client import FLClient
 from server import FLServer
 import lossStrategies
@@ -18,7 +19,7 @@ def runFLSimulation():
     #Load Data
     print("Loading data...")
     if LOADER == '3_clients':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_age3("./Datasets/adult.csv", "sex") # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_acs_data.load_acs_random("RAC1P",  3) # replace function if other Dataset wanted
     elif LOADER == '5_clients':
         data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_age5() # replace function if other Dataset wanted
     elif LOADER == 'random':
