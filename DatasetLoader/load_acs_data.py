@@ -75,7 +75,6 @@ def load_acs_states_3(sensitive_feature: str = "RAC1P"):
     """
     data = load_acs()
 
-    # Stabiler y-encoder global (wie bei Adult)
     y_encoder = LabelEncoder()
     y_encoder.fit(data[TARGET_COL])
 
@@ -84,12 +83,10 @@ def load_acs_states_3(sensitive_feature: str = "RAC1P"):
     np.random.shuffle(unique_states)
     state_groups = np.array_split(unique_states, 3)
 
-    # States -> Clients (State bleibt vollständig bei einem Client)
     df1 = data[data["STATE_ID"].isin(state_groups[0])].copy()
     df2 = data[data["STATE_ID"].isin(state_groups[1])].copy()
     df3 = data[data["STATE_ID"].isin(state_groups[2])].copy()
 
-    # STATE_ID ist nur fürs Splitten, nicht als Feature
     df1 = df1.drop(columns=["STATE_ID"])
     df2 = df2.drop(columns=["STATE_ID"])
     df3 = df3.drop(columns=["STATE_ID"])
