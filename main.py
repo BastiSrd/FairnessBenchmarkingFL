@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 import DatasetLoader
-from DatasetLoader import load_adult_data, load_acs_data
+from DatasetLoader import load_adult_data, load_acs_data, load_bank_data
+from DatasetLoader.load_kdd_data import load_kdd, load_kdd_random
 from client import FLClient
 from server import FLServer
 import lossStrategies
@@ -19,7 +20,7 @@ def runFLSimulation():
     #Load Data
     print("Loading data...")
     if LOADER == '3_clients':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_acs_data.load_acs_random("RAC1P",  3) # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_adult_data.load_adult_random() # replace function if other Dataset wanted
     elif LOADER == '5_clients':
         data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_age5() # replace function if other Dataset wanted
     elif LOADER == 'random':
@@ -45,7 +46,11 @@ def runFLSimulation():
     clients = []
     for c_name, c_data in data_dict.items():
         clients.append(FLClient(c_name, c_data, input_dim, device))
-        
+
+    maj = (y_val.mean() >= 0.5).float()
+    baseline = (y_val == maj).float().mean().item()
+    print("Majority baseline acc:", baseline)
+
     print(f"Initialized {len(clients)} clients.")
 
     #Simulation Loop
