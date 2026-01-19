@@ -1,9 +1,10 @@
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score
-from client import simpleModel #reuse the model definition
+from models import simpleModel #reuse the model definition
+from fairnessMetrics import compute_equalized_odds, compute_statistical_parity
 
-class FLServer:
+class FedAvgServer:
     def __init__(self, test_data, input_dim, device='cpu'):
         """
         Args:
@@ -50,6 +51,9 @@ class FLServer:
         #Update Global Model
         self.global_model.load_state_dict(new_weights)
 
+
+
+
     def evaluate(self):
         """
         Runs inference on the global test set and computes metrics.
@@ -63,7 +67,18 @@ class FLServer:
             # Accuracy
             acc = accuracy_score(self.y_test.cpu(), preds.cpu())
 
+            # Prepare tensors (Ensure they are flat 1D arrays)
+            y_flat = self.y_test.view(-1)
+            s_flat = self.s_test.view(-1)
+            preds_flat = preds.view(-1)
+
+            # 2. Compute Fairness Metrics using new functions
+            stat_parity = compute_statistical_parity(preds_flat, s_flat)
+            eq_odds = compute_equalized_odds(preds_flat, y_flat, s_flat)
+
             return {
                 "Accuracy": acc,
+                "Statistical_Parity": stat_parity,
+                "Equalized_Odds": eq_odds,
                 "Lambda": self.global_lambda
             }
