@@ -13,7 +13,7 @@ BANK_PATH = BASE_DIR / "Datasets" / "bank-full.csv"
 
 RANDOM_STATE = 42
 TARGET_COL = "y"
-SENSITIVE_FEATURE = "martial"  # possible features: martial
+SENSITIVE_FEATURE = "marital"  # possible features: marital
 
 CATEGORICAL_COLS = [
     "job", "marital", "education", "default", "housing", "loan",

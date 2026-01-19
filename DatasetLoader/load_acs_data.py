@@ -70,7 +70,7 @@ def load_acs_states_3():
 
     dfs = [
         data[data["STATE_ID"].isin(state_groups[i])].copy().drop(columns=["STATE_ID"])
-        for i in range(5)
+        for i in range(3)
     ]
 
     splits = [split_70_15_15(d, seed=RANDOM_STATE) for d in dfs]
