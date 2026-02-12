@@ -15,9 +15,12 @@ def get_rates(preds, labels, sensitive, s_value):
         tuple: A tuple containing (TPR, FPR, PPR) as floats. 
                 Returns (0.0, 0.0, 0.0) if the group is empty.
     """
+    s_value = int(s_value)
     mask = (sensitive == s_value)
     
     if mask.sum() == 0:
+
+        print("mask.sum is zero therefore TPR, FPR, PPR all 0")
         return 0.0, 0.0, 0.0
 
     # Filter predictions
