@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-import DatasetLoader.load_adult_data, DatasetLoader.load_acs_data, DatasetLoader.load_bank_data, DatasetLoader.load_kdd_data, DatasetLoader.load_cac_data
+from DatasetLoader import load_adult_data, load_acs_data, load_bank_data, load_kdd_data, load_cac_data
 from FedAvg.FedAvgClient import FedAvgClient
 from FedAvg.FedAvgServer import FedAvgServer
 from logger import FLLogger
@@ -39,9 +39,9 @@ def runFLSimulation():
     if LOADER == '3_clients':
         data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_adult_data.load_adult_random() # replace function if other Dataset wanted
     elif LOADER == '5_clients':
-        data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_age5() # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, _, _ = load_adult_data.load_adult_age5() # replace function if other Dataset wanted
     elif LOADER == 'random':
-        data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_random() # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, _, _ = load_adult_data.load_adult_random() # replace function if other Dataset wanted
     else:
         raise ValueError(f"Unknown loader: {LOADER}")
 
