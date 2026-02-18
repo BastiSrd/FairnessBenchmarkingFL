@@ -42,7 +42,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CLIENT_EPOCHS = 3
 CLIENT_BATCHSIZE = 64
 CLIENT_STEPSIZE = 0.01
-COMMUNICATION_ROUNDS = 10
+COMMUNICATION_ROUNDS = 50
 NY = 100  # number of points in Y sets for fairness
 LAMBDA = 0.5
 
@@ -98,7 +98,7 @@ s_test = torch.tensor(s_test_list, dtype=torch.float32).to(DEVICE)
 
 # Convert dictionary to list of tuples for the Server (X, y, A)
 client_datasets = [
-    (client["X"], client["y"], client["s"])
+    (client["X"], client["y"], (client["s"] * 2 + client["y"])) 
     for client in client_data_dict.values()
 ]
 
