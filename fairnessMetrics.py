@@ -115,3 +115,30 @@ def compute_equalized_odds(preds, labels, sensitive):
     fpr_diff = abs(fpr_b - fpr_a)
 
     return 0.5 * (tpr_diff + fpr_diff)
+
+def compute_balanced_accuracy(preds, labels):
+    """
+    Calculates Balanced Accuracy, defined as the average of TPR and TNR.
+
+    Formula: 0.5 * (TPR + TNR)
+
+    Args:
+        preds (torch.Tensor): Binary predictions (0 or 1) of shape (N,).
+        labels (torch.Tensor): Ground truth labels (0 or 1) of shape (N,).
+
+    Returns:
+        float: The Balanced Accuracy score.
+    """
+    # True Positives and Negatives
+    tp = ((preds == 1) & (labels == 1)).sum().item()
+    tn = ((preds == 0) & (labels == 0)).sum().item()
+    
+    # Positives and Negatives
+    pos = (labels == 1).sum().item()
+    neg = (labels == 0).sum().item()
+
+    # Calculate TPR and TNR
+    tpr = tp / pos if pos > 0 else 0.0
+    tnr = tn / neg if neg > 0 else 0.0
+
+    return 0.5 * (tpr + tnr)

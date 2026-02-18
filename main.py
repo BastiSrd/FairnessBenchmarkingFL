@@ -37,7 +37,7 @@ def runFLSimulation():
     #Load Data
     print("Loading data...")
     if LOADER == '3_clients':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_adult_data.load_adult_random() # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_age3() # replace function if other Dataset wanted
     elif LOADER == '5_clients':
         data_dict, X_test, y_test, s_list, _, _ = load_adult_data.load_adult_age5() # replace function if other Dataset wanted
     elif LOADER == 'random':
@@ -345,6 +345,10 @@ def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg,
 
 def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
     #Track best round per metric
+
+    best_blAcc_value = -1.0
+    best_round_blAcc = -1
+
     best_acc_value = -1.0
     best_round_acc = -1
 
@@ -386,6 +390,10 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         if metrics["Accuracy"] > best_acc_value:
             best_acc_value = metrics["Accuracy"]
             best_round_acc = r + 1
+        
+        if metrics["balanced_Accuracy"] > best_blAcc_value:
+            best_blAcc_value = metrics["balanced_Accuracy"]
+            best_round_blAcc = r + 1
 
         if abs(metrics["Statistical_Parity"]) < best_sp_value:
             best_sp_value = abs(metrics["Statistical_Parity"])
@@ -398,6 +406,7 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         print(
             f"Results Round {r+1}: "
             f"Acc={metrics['Accuracy']:.4f}, "
+            f"Balanced Acc={metrics['balanced_Accuracy']:.4f}, "
             f"SP={metrics['Statistical_Parity']:.4f}, "
             f"EO={metrics['Equalized_Odds']:.4f}"
         )
@@ -405,6 +414,7 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
 
     logger.best_metrics = {
     "Accuracy": {"round": best_round_acc, "value": best_acc_value},
+    "balanced_Accuracy": {"round": best_round_blAcc, "value": best_blAcc_value},
     "Statistical_Parity": {"round": best_round_sp, "value": best_sp_value},
     "Equalized_Odds": {"round": best_round_eo, "value": best_eo_value}
     }
