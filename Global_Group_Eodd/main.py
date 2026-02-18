@@ -10,7 +10,8 @@ from DatasetLoader.load_bank_data import load_bank_random, load_bank_age3, load_
 from DatasetLoader.load_acs_data import load_acs_random, load_acs_states_3, load_acs_states_5
 from DatasetLoader.load_kdd_data import load_kdd_random, load_kdd_age3, load_kdd_age5
 from DatasetLoader.load_cac_data import load_cac_random,load_cac_states_3, load_cac_states_5
-from Global_Group_Eodd.metrics import accuracy, P1,Eodd
+from sklearn.metrics import accuracy_score
+from fairnessMetrics import compute_statistical_parity, compute_equalized_odds, compute_balanced_accuracy
 from Global_Group_Eodd.server import Server
 from Global_Group_Eodd.clients import Client
 from Global_Group_Eodd.yset import YSet
@@ -40,10 +41,10 @@ def build_model_class(input_size):
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CLIENT_EPOCHS = 3
 CLIENT_BATCHSIZE = 64
-CLIENT_STEPSIZE = 0.1
+CLIENT_STEPSIZE = 0.01
 COMMUNICATION_ROUNDS = 10
 NY = 100  # number of points in Y sets for fairness
-LAMBDA = 1
+LAMBDA = 0.5
 
 # -----------------------------
 # 3. Dynamic Dataset Selection
@@ -151,27 +152,33 @@ def print_log_progress():
 
     server.model.eval() 
     with torch.no_grad():
-        
         all_probs = server.model(X_test).flatten()
+
     all_labels = y_test.flatten()
     all_sensitive = s_test.flatten()
 
+    all_preds = (all_probs > 0.5).float()
     
-    # Convert probabilities back to logits so metrics.py works correctly
-    all_logits = torch.logit(all_probs, eps=1e-6)
+    # Accuracy
+    acc = accuracy_score(all_labels.cpu(), all_preds.cpu())
+
+    # Balanced Accuracy
+    bal_acc = compute_balanced_accuracy(all_preds, all_labels)
     
-    # Metrics
-    acc = accuracy(all_logits, all_labels).item()
-    sp = P1(all_logits, all_sensitive).item()
-    eodd_val = Eodd(all_logits, all_sensitive, all_labels).item() 
+    # Statistical Parity
+    sp = compute_statistical_parity(all_preds, all_sensitive)
     
-    print(f"Round {print_log_progress.current_round}: Acc={acc:.4f}, SP={sp:.4f}, Eodd={eodd_val:.4f}")
+    # Equalized Odds
+    eodd_val = compute_equalized_odds(all_preds, all_labels, all_sensitive) 
+    
+    print(f"Round {print_log_progress.current_round}: Acc={acc:.4f}, BalAcc={bal_acc:.4f}, SP={sp:.4f}, Eodd={eodd_val:.4f}")
 
     # --- LOCAL CSV/JSON LOGGING ---
     fl_logger.log_round(
         round_idx=print_log_progress.current_round,
         metrics={
             "Accuracy": acc,
+            "balanced_Accuracy": bal_acc,
             "Statistical_Parity": sp,
             "Equalized_Odds": eodd_val 
         }
@@ -222,9 +229,14 @@ with torch.no_grad():
 
 all_labels = y_test.flatten()
 all_sensitive = s_test.flatten()
-all_logits = torch.logit(all_probs, eps=1e-6)
-final_acc = accuracy(all_logits, all_labels)
-final_eodd = Eodd(all_logits, all_sensitive, all_labels)
+all_preds = (all_probs > 0.5).float() 
+
+final_acc = accuracy_score(all_labels.cpu(), all_preds.cpu())
+final_bal = compute_balanced_accuracy(all_preds, all_labels)
+final_sp = compute_statistical_parity(all_preds, all_sensitive)
+final_eodd = compute_equalized_odds(all_preds, all_labels, all_sensitive)
 
 print(f"Global Model Accuracy: {final_acc:.4f}")
+print(f"Global Model Balanced Accuracy: {final_bal:.4f}")
+print(f"Global Model Statistical Parity (SP): {final_sp:.4f}")
 print(f"Global Model Equalized Odds (Eodd): {final_eodd:.4f}")

@@ -1,0 +1,31 @@
+{
+    "config": {
+        "algorithm": "GlobalFairness_Eodd",
+        "loader": "adult_iid",
+        "CLIENT_EPOCHS": 3,
+        "CLIENT_BATCHSIZE": 64,
+        "CLIENT_STEPSIZE": 0.1,
+        "COMMUNICATION_ROUNDS": 10,
+        "LAMBDA": 1,
+        "NY": 100,
+        "timestamp": "2026-02-18_20-42-46"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 10,
+            "value": 0.7715455475946776
+        },
+        "balanced_Accuracy": {
+            "round": 10,
+            "value": 0.5345632341201961
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.0
+        },
+        "Equalized_Odds": {
+            "round": 1,
+            "value": 0.0
+        }
+    }
+}
