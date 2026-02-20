@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from sklearn.metrics import accuracy_score
 from models import simpleModel #reuse the model definition
-from fairnessMetrics import compute_equalized_odds, compute_statistical_parity
+from fairnessMetrics import compute_equalized_odds, compute_statistical_parity, compute_balanced_accuracy
 
 class FedAvgServer:
     def __init__(self, test_data, input_dim, device='cpu'):
@@ -75,9 +75,11 @@ class FedAvgServer:
             # 2. Compute Fairness Metrics using new functions
             stat_parity = compute_statistical_parity(preds_flat, s_flat)
             eq_odds = compute_equalized_odds(preds_flat, y_flat, s_flat)
+            balanced_acc = compute_balanced_accuracy(preds_flat, y_flat)
 
             return {
                 "Accuracy": acc,
+                "balanced_Accuracy": balanced_acc,
                 "Statistical_Parity": stat_parity,
                 "Equalized_Odds": eq_odds,
                 "Lambda": self.global_lambda
