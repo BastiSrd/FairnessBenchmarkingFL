@@ -1,182 +1,199 @@
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score
-from models import simpleModel
+from models import modelFedMinMax
 from fairnessMetrics import compute_statistical_parity, compute_equalized_odds, compute_balanced_accuracy
+
 
 class EOFedMinMaxServer:
     def __init__(self, test_data, input_dim, device='cpu'):
-        """
-        Args:
-            test_data (tuple): (X_test, y_test, s_test)
-            input_dim (int): Feature size for the model
-            device (str): 'cpu' or 'cuda'
-        """
         self.device = device
-        
-        #Unpack and move test data to device
-        self.X_test = test_data[0].to(self.device)
-        print(f"len x_test: {len(self.X_test)}")
-        self.y_test = test_data[1].to(self.device).view(-1, 1)
-        #Convert sensitive attributes to tensor if they are a list
+
+        self.X_test = test_data[0].to(self.device).float()
+        self.y_test = test_data[1].to(self.device).float().view(-1, 1)
+
         if isinstance(test_data[2], list):
-            self.s_test = torch.tensor(test_data[2], dtype=torch.float32).to(self.device).view(-1, 1)
+            self.s_test = torch.tensor(test_data[2], dtype=torch.long).to(self.device).view(-1, 1)
         else:
-            self.s_test = test_data[2].to(self.device).view(-1, 1)
-        self.s_test_orig = torch.floor(self.s_test / 2).float()
-        print(f"len s_test_origin: {len(self.s_test_orig)}")
-        self.x_val = test_data[3].to(self.device)
-        self.y_val = test_data[4].to(self.device).view(-1, 1)
-        print(f"len x_val: {len(self.x_val)}")
+            self.s_test = test_data[2].to(self.device).long().view(-1, 1)
+
+        self.x_val = test_data[3].to(self.device).float()
+        self.y_val = test_data[4].to(self.device).float().view(-1, 1)
+
         if isinstance(test_data[5], list):
-            self.s_val = torch.tensor(test_data[5], dtype=torch.float32).to(self.device).view(-1, 1)
+            self.s_val = torch.tensor(test_data[5], dtype=torch.long).to(self.device).view(-1, 1)
         else:
-            self.s_val = test_data[5].to(self.device).view(-1, 1)
-        self.s_val_orig = torch.floor(self.s_val / 2).float()
-        print(f"len s_val_origin: {len(self.s_val_orig)}")
-        
-        #Initialize Global Model
-        self.global_model = simpleModel(input_dim).to(self.device)
-        self._avg_state = None   # dict[str, torch.Tensor]
-        self._avg_t = 0          # how many rounds have been averaged
+            self.s_val = test_data[5].to(self.device).long().view(-1, 1)
 
+        self.global_model = modelFedMinMax(input_dim).to(self.device)
 
-        self.trust_scores = {} 
+        # running average of iterates
+        self._avg_state = None
+        self._avg_t = 0
 
-        self.global_lambda = 0.0 
+        # adaptive lambda
+        self.global_lambda = 1.0
+        self.lambda_lr = 0.25      # how fast lambda adapts
+        self.lambda_max = 5.0     # cap for stability
+        self.eo_target = 0.001     # target EO (you can tune)
 
-        self.device = device
+        # adversary LR
+        self.lr_mu = 0.05
 
-        #FedMinMax
-        self.lr_mu = 0.1 # Adversary learning rate
-
+        # will be set by set_global_stats
+        self.group_ids = None
+        self.gid_to_idx = None
+        self.rho_y0 = None
+        self.rho_y1 = None
+        self.mu_y0 = None
+        self.mu_y1 = None
+        self.real_count_y0 = None
+        self.real_count_y1 = None
 
     def update_running_average(self, new_state_dict):
-        """
-        Update the running average:
-        avg <- avg + (theta - avg)/t
-        where t counts how many global models have been averaged so far.
-        """
-        # Move tensors to server device to keep everything consistent
         new_sd = {k: v.detach().to(self.device) for k, v in new_state_dict.items()}
-
         if self._avg_state is None:
             self._avg_state = {k: v.clone() for k, v in new_sd.items()}
             self._avg_t = 1
             return
-
         self._avg_t += 1
         t = self._avg_t
         for k, v in new_sd.items():
             self._avg_state[k].add_((v - self._avg_state[k]) / t)
 
     def get_averaged_state(self):
-        """Return averaged params if available, else current model params."""
         if self._avg_state is None:
             return self.global_model.state_dict()
         return self._avg_state
 
     def load_averaged_model(self):
-        """Load the averaged parameters into the global model (use only at the end)."""
         self.global_model.load_state_dict(self.get_averaged_state())
 
-    #FedMinMax
-    def set_global_stats(self, total_group_counts):
+    def set_global_stats(self, total_counts_by_group):
         """
-        Call this from main.py after loading data to set accurate priors rho.
-        total_group_counts: dict {gid: count}
+        Expect:
+          total_counts_by_group = {
+              gid: {"y0": count_neg, "y1": count_pos},
+              ...
+          }
         """
-        self.real_group_counts = dict(total_group_counts)
+        # normalize keys
+        real_y0 = {}
+        real_y1 = {}
+        for gid, v in total_counts_by_group.items():
+            gid_int = int(gid)
+            real_y0[gid_int] = int(v.get("y0", 0))
+            real_y1[gid_int] = int(v.get("y1", 0))
 
-        total = sum(total_group_counts.values())
-        self.group_ids = sorted(total_group_counts.keys())  # true group ids, deterministic order
+        self.real_count_y0 = real_y0
+        self.real_count_y1 = real_y1
+
+        self.group_ids = sorted(set(real_y0.keys()) | set(real_y1.keys()))
         self.gid_to_idx = {gid: i for i, gid in enumerate(self.group_ids)}
-        rho_list = [total_group_counts[gid] / total for gid in self.group_ids]
-        self.rho = torch.tensor(rho_list, device=self.device)
-        self.mu = torch.tensor(rho_list, device=self.device) # Initialize mu = rho [cite: 236]
+
+        total0 = sum(real_y0.values())
+        total1 = sum(real_y1.values())
+
+        # Priors per label-slice
+        rho0 = [(real_y0.get(gid, 0) / (total0 + 1e-12)) for gid in self.group_ids]
+        rho1 = [(real_y1.get(gid, 0) / (total1 + 1e-12)) for gid in self.group_ids]
+
+        self.rho_y0 = torch.tensor(rho0, device=self.device, dtype=torch.float32)
+        self.rho_y1 = torch.tensor(rho1, device=self.device, dtype=torch.float32)
+
+        # init mu = rho
+        self.mu_y0 = self.rho_y0.clone()
+        self.mu_y1 = self.rho_y1.clone()
+
+    def _update_lambda_from_val(self):
+        """
+        Adaptive lambda update based on validation EO (hard preds).
+        Increase lambda if EO is above target, decrease otherwise.
+        """
+        self.global_model.eval()
+        with torch.no_grad():
+            logits = self.global_model(self.x_val)
+            probs = torch.sigmoid(logits)
+            preds = (probs > 0.5).float()
+
+        y_flat = self.y_val.view(-1)
+        s_flat = self.s_val.view(-1)
+        p_flat = preds.view(-1)
+
+        eo = float(compute_equalized_odds(p_flat, y_flat, s_flat))
+
+        # proportional control
+        err = eo - self.eo_target
+        self.global_lambda = float(np.clip(self.global_lambda + self.lambda_lr * err, 0.0, self.lambda_max))
 
     def initializeWeights(self):
-        """Returns the global model weights (on CPU) and group weights to be sent to clients."""
+        """
+        Returns:
+          - model_weights
+          - group_weights_y0 (for y==0 slice)
+          - group_weights_y1 (for y==1 slice)
+          - lambda_eo (adaptive)
+        """
+        # avoid division by zero
+        w0 = self.mu_y0 / (self.rho_y0 + 1e-10)
+        w1 = self.mu_y1 / (self.rho_y1 + 1e-10)
 
-        # Avoid division by zero
-        
-        
-        w_vector = self.mu / (self.rho + 1e-10) 
-        # Convert to dict for easier client consumption
-        w_dict = {gid: w_vector[self.gid_to_idx[gid]].item() for gid in self.group_ids}
-        
+        w0_dict = {gid: float(w0[self.gid_to_idx[gid]].item()) for gid in self.group_ids}
+        w1_dict = {gid: float(w1[self.gid_to_idx[gid]].item()) for gid in self.group_ids}
+
         return {
             'model_weights': {k: v.cpu() for k, v in self.global_model.state_dict().items()},
-            'group_weights': w_dict
+            'group_weights_y0': w0_dict,
+            'group_weights_y1': w1_dict,
+            'lambda_eo': float(self.global_lambda),
         }
 
     def aggregate(self, client_reports, agg_strategy):
-        """
-        Generic aggregation step.
-        
-        Args:
-            client_reports (list): List of dicts returned by clients.
-            agg_strategy (func): Function that computes new weights.
-        """
-        '''old
-        #Execute Strategy to get new weights
-        new_weights = agg_strategy(client_reports, self.global_model, self.device)
-        
-        #Update Global Model
-        self.global_model.load_state_dict(new_weights)
-        '''
-        #FedMinMax
-        # Pack state needed for FedMinMax
         server_state = {
-            'mu': self.mu,
-            'rho': self.rho,
+            'mu_y0': self.mu_y0,
+            'mu_y1': self.mu_y1,
+            'rho_y0': self.rho_y0,
+            'rho_y1': self.rho_y1,
             'lr_mu': self.lr_mu,
-            'group_counts': self.real_group_counts,   # exact n_a
-            'group_ids': self.group_ids,              # exact order used for mu/rho
-            'gid_to_idx': self.gid_to_idx
+            'group_counts_y0': self.real_count_y0,
+            'group_counts_y1': self.real_count_y1,
+            'group_ids': self.group_ids,
+            'gid_to_idx': self.gid_to_idx,
         }
 
-        # Execute Strategy
         new_weights = agg_strategy(client_reports, self.global_model, self.device, server_state)
 
-        
-        # Update Global Model and average model for final output
         self.global_model.load_state_dict(new_weights)
         self.update_running_average(new_weights)
 
-        # Update internal mu (Strategies might update state in place, but good to be explicit)
-        self.mu = server_state['mu']
+        # pull back updated mus
+        self.mu_y0 = server_state['mu_y0']
+        self.mu_y1 = server_state['mu_y1']
+
+        # update lambda from current validation EO
+        self._update_lambda_from_val()
 
     def evaluate(self, final=False):
-        """
-        Runs inference on the global test set and computes metrics.
-        Returns: Dict {Accuracy, balanced Accuracy, SP, EO}
-        """
         self.global_model.eval()
+
         if final:
-            eval_X = self.X_test
-            eval_y = self.y_test
-            eval_s = self.s_test_orig
+            eval_X, eval_y, eval_s = self.X_test, self.y_test, self.s_test
         else:
-            eval_X = self.x_val
-            eval_y = self.y_val
-            eval_s = self.s_val_orig
+            eval_X, eval_y, eval_s = self.x_val, self.y_val, self.s_val
+
         with torch.no_grad():
             logits = self.global_model(eval_X)
-            preds = (logits > 0.5).float()
-            print(f"preds len: {len(preds)}, eval_y len: {len(eval_y)}, eval_s len: {len(eval_s)}")
+            probs = torch.sigmoid(logits)
+            preds = (probs > 0.5).float()
 
-            # Accuracy
             acc = accuracy_score(eval_y.cpu(), preds.cpu())
 
-            # Prepare tensors (Ensure they are flat 1D arrays)
             y_flat = eval_y.view(-1)
-            s_orig_flat = eval_s.view(-1)
+            s_flat = eval_s.view(-1)
             preds_flat = preds.view(-1)
 
-            # 2. Compute Fairness Metrics using new functions
-            stat_parity = compute_statistical_parity(preds_flat, s_orig_flat)
-            eq_odds = compute_equalized_odds(preds_flat, y_flat, s_orig_flat)
+            stat_parity = compute_statistical_parity(preds_flat, s_flat)
+            eq_odds = compute_equalized_odds(preds_flat, y_flat, s_flat)
             balAcc = compute_balanced_accuracy(preds_flat, y_flat)
 
             return {
@@ -186,4 +203,3 @@ class EOFedMinMaxServer:
                 "Equalized_Odds": eq_odds,
                 "Lambda": self.global_lambda
             }
-        

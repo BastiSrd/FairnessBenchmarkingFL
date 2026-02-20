@@ -5,19 +5,19 @@ from FedAvg.FedAvgClient import FedAvgClient
 from FedAvg.FedAvgServer import FedAvgServer
 from logger import FLLogger
 from FedAvg.FedAvgLossStrategies import loss_standard, agg_fedavg
-from FedMinMax.FedMinMaxClient import FedMinMaxClient
-from FedMinMax.FedMinMaxServer import FedMinMaxServer
-from FedMinMax.lossStrategiesFedMinMax import agg_fedminmax, loss_fedminmax
 from EOFedMinMax.EOFedMinMaxClient import EOFedMinMaxClient
 from EOFedMinMax.EOFedMinMaxServer import EOFedMinMaxServer
-from EOFedMinMax.EOlossStrategiesFedMinMax import agg_EOfedminmax, loss_EOfedminmax
+from EOFedMinMax.lossStrategiesEOFedMinMax import agg_EOfedminmax, loss_EOfedminmax
+from OrigFedMinMax.OrigFedMinMaxClient import OrigFedMinMaxClient
+from OrigFedMinMax.OrigFedMinMaxServer import OrigFedMinMaxServer
+from OrigFedMinMax.OriglossStrategiesFedMinMax import agg_Origfedminmax, loss_Origfedminmax
 
 # --- Configuration ---
-ALGORITHM = 'FedMinMax'  # Options: 'FedAvg', 'FedMinMax', 'TrustFed', 'Fairness' / only FedAvg currently implemented
-LOADER = '3_clients'     # Options: '3_clients', '5_clients', 'random'
-ROUNDS = 10
+ALGORITHM = 'EOFedMinMax'  # Options: 'FedAvg', 'FedMinMax', 'TrustFed', 'Fairness' / only FedAvg currently implemented
+LOADER = '5_clients'     # Options: '3_clients', '5_clients', 'random'
+ROUNDS = 50
 CLIENT_EPOCHS = 1
-LR = 0.001
+LR = 0.005
 
 
 def runFLSimulation():
@@ -61,36 +61,36 @@ def runFLSimulation():
         print(f"Initialized {len(clients)} clients.")
 
         runFedAvgSimulationLoop(server,clients,logger,client_loss,server_agg)
-    elif ALGORITHM == "FedMinMax":
-        client_loss = loss_fedminmax
-        server_agg = agg_fedminmax
-        server = FedMinMaxServer((X_test, y_test, s_list, X_val, y_val, sval_list), input_dim, device)
-        clients = []
-        for c_name, c_data in data_dict.items():
-            clients.append(FedMinMaxClient(c_name, c_data, input_dim, device))
-        print(f"Initialized {len(clients)} clients.")
-
-        runFedMinMaxSimulationLoop(server,clients,logger,client_loss,server_agg, data_dict)
     elif ALGORITHM == "EOFedMinMax":
         client_loss = loss_EOfedminmax
         server_agg = agg_EOfedminmax
-        s_test_tensor = torch.tensor(s_list).long()
-        y_test_tensor = y_test.view(-1).long()
-        s_joint_test = (s_test_tensor * 2 + y_test_tensor).tolist()
-        s_val_tensor = torch.tensor(sval_list).long()
-        y_val_tensor = y_val.view(-1).long()
-        s_joint_val = (s_val_tensor * 2 + y_val_tensor).tolist() 
-        server = EOFedMinMaxServer((X_test, y_test, s_joint_test, X_val, y_val, s_joint_val), input_dim, device)
+        server = EOFedMinMaxServer((X_test, y_test, s_list, X_val, y_val, sval_list), input_dim, device)
         clients = []
         for c_name, c_data in data_dict.items():
             clients.append(EOFedMinMaxClient(c_name, c_data, input_dim, device))
         print(f"Initialized {len(clients)} clients.")
 
         runEOFedMinMaxSimulationLoop(server,clients,logger,client_loss,server_agg, data_dict)
+    elif ALGORITHM == "FedMinMax":
+        client_loss = loss_Origfedminmax
+        server_agg = agg_Origfedminmax
+        s_test_tensor = torch.tensor(s_list).long()
+        y_test_tensor = y_test.view(-1).long()
+        s_joint_test = (s_test_tensor * 2 + y_test_tensor).tolist()
+        s_val_tensor = torch.tensor(sval_list).long()
+        y_val_tensor = y_val.view(-1).long()
+        s_joint_val = (s_val_tensor * 2 + y_val_tensor).tolist() 
+        server = OrigFedMinMaxServer((X_test, y_test, s_joint_test, X_val, y_val, s_joint_val), input_dim, device)
+        clients = []
+        for c_name, c_data in data_dict.items():
+            clients.append(OrigFedMinMaxClient(c_name, c_data, input_dim, device))
+        print(f"Initialized {len(clients)} clients.")
+
+        runOrigFedMinMaxSimulationLoop(server,clients,logger,client_loss,server_agg, data_dict)
     else:
         raise ValueError(f"Unknown Algorithm: {ALGORITHM}")
 
-def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg, data_dict):
+def runOrigFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg, data_dict):
     #Track best round per metric
 
     best_blAcc_value = -1.0
@@ -228,7 +228,7 @@ def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_ag
 
 
 
-def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg, data_dict):
+def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg, data_dict):
     #Track best round per metric
     best_blAcc_value = -1.0
     best_round_blAcc = -1
@@ -248,14 +248,21 @@ def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg,
     global_group_counts = {}
     for c_data in data_dict.values():
         s = c_data['s'].view(-1).long()
-        uniques, counts = torch.unique(s, return_counts=True)
-        for u, c in zip(uniques, counts):
-            gid = u.item()
-            global_group_counts[gid] = global_group_counts.get(gid, 0) + c.item()
+        y = c_data['y'].view(-1).long()
 
-    print(f"global group counts: {global_group_counts}")
+        uniq = torch.unique(s)
+        for gid in uniq.tolist():
+            gid = int(gid)
+            mask_g = (s == gid)
+            n0 = int(((y == 0) & mask_g).sum().item())
+            n1 = int(((y == 1) & mask_g).sum().item())
 
-    # FedMinMax - Pass stats to server for correct rho calculation
+            if gid not in global_group_counts:
+                global_group_counts[gid] = {"y0": 0, "y1": 0}
+            global_group_counts[gid]["y0"] += n0
+            global_group_counts[gid]["y1"] += n1
+
+    print(f"global_group_counts (EO): {global_group_counts}")
     server.set_global_stats(global_group_counts)
 
     
@@ -265,7 +272,9 @@ def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg,
         #Get Global State
         broadcast_data = server.initializeWeights()
         global_weights = broadcast_data['model_weights']
-        group_weights = broadcast_data.get('group_weights', {})
+        w_y0 = broadcast_data.get('group_weights_y0', {})
+        w_y1 = broadcast_data.get('group_weights_y1', {})
+        lambda_eo = broadcast_data.get('lambda_eo', 0.0)
 
 
         #Train Clients
@@ -276,7 +285,16 @@ def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg,
 
 
             #Train
-            report = client.train(epochs=CLIENT_EPOCHS, lr=LR, loss_strategy=client_loss, strategy_context={'group_weights': group_weights})
+            report = client.train(
+                epochs=CLIENT_EPOCHS,
+                lr=LR,
+                loss_strategy=client_loss,
+                strategy_context={
+                    'group_weights_y0': w_y0,
+                    'group_weights_y1': w_y1,
+                    'lambda_eo': lambda_eo
+                }
+            )
             client_reports.append(report)
 
         #Log client data

@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from models import simpleModel
+from models import modelFedMinMax
 
-class FedMinMaxClient:
+class OrigFedMinMaxClient:
     def __init__(self, client_name, data_dict, input_dim, device='cuda'):
         """
         Args:
@@ -18,23 +18,22 @@ class FedMinMaxClient:
         self.device = device
         
         #move data to the device immediately to avoid transfer overhead later
-        self.X = data_dict['X'].to(device)
+        self.X = data_dict['X'].to(device).float()
         
         #Reshape y and s to (N, 1) to match model output shape
-        self.y = data_dict['y'].to(device).view(-1, 1)
-        
-
-        self.s = data_dict['s'].to(device).long().view(-1, 1)
+        self.y = data_dict['y'].to(device).float().view(-1, 1)
+        self.s_original = data_dict['s'].to(device).view(-1, 1)
+        self.s = (self.s_original * 2 + self.y).long() # This is now our "group"
         
         #Create a DataLoader for batching (Standard SGD)
         dataset = TensorDataset(self.X, self.y, self.s)
-        self.loader = DataLoader(dataset, batch_size=len(self.X), shuffle=True) 
+        self.loader = DataLoader(dataset, batch_size=len(self.X), shuffle=True)
         
         #Initialize Model
-        self.model = simpleModel(input_dim).to(device)
+        self.model = modelFedMinMax(input_dim).to(device)
         
         #Define Standard Criterion (Base Loss)
-        self.criterion = nn.BCELoss()
+        self.criterion = nn.BCEWithLogitsLoss()
 
     def set_parameters(self, global_weights):
         """
@@ -48,7 +47,7 @@ class FedMinMaxClient:
         Required for FedMinMax step 9.
         """
         self.model.eval()
-        criterion = nn.BCELoss(reduction='sum') # Sum to aggregate easier later
+        criterion = nn.BCEWithLogitsLoss(reduction='sum') # Sum to aggregate easier later
         
         group_risks = {}
         group_counts = {}
@@ -61,7 +60,7 @@ class FedMinMaxClient:
             outputs = self.model(self.X)
             
             for gid in unique_groups:
-                gid = int(gid.item())
+                gid = gid.item()
                 mask = (self.s == gid).squeeze()
                 if mask.sum() == 0: continue
                 
@@ -85,7 +84,6 @@ class FedMinMaxClient:
         """
 
 
-        
         initial_group_risks, group_counts = self.evaluate_group_risks()
         
         self.model.train()
@@ -118,7 +116,7 @@ class FedMinMaxClient:
             #Average loss for this epoch
             epoch_loss += batch_loss_sum / len(self.loader)
         print(f"{self.name} loss: {epoch_loss / epochs}")
-        
+
         #Return a report dictionary to the Server
         return {
             'client_name': self.name,

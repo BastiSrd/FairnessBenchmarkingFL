@@ -1,10 +1,10 @@
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score
-from models import simpleModel
+from models import modelFedMinMax
 from fairnessMetrics import compute_statistical_parity, compute_equalized_odds, compute_balanced_accuracy
 
-class FedMinMaxServer:
+class OrigFedMinMaxServer:
     def __init__(self, test_data, input_dim, device='cpu'):
         """
         Args:
@@ -22,14 +22,17 @@ class FedMinMaxServer:
             self.s_test = torch.tensor(test_data[2], dtype=torch.float32).to(self.device).view(-1, 1)
         else:
             self.s_test = test_data[2].to(self.device).view(-1, 1)
+        self.s_test_orig = torch.floor(self.s_test / 2).float()
         self.x_val = test_data[3].to(self.device)
         self.y_val = test_data[4].to(self.device).view(-1, 1)
         if isinstance(test_data[5], list):
             self.s_val = torch.tensor(test_data[5], dtype=torch.float32).to(self.device).view(-1, 1)
         else:
             self.s_val = test_data[5].to(self.device).view(-1, 1)
+        self.s_val_orig = torch.floor(self.s_val / 2).float()
+        
         #Initialize Global Model
-        self.global_model = simpleModel(input_dim).to(self.device)
+        self.global_model = modelFedMinMax(input_dim).to(self.device)
         self._avg_state = None   # dict[str, torch.Tensor]
         self._avg_t = 0          # how many rounds have been averaged
 
@@ -41,7 +44,7 @@ class FedMinMaxServer:
         self.device = device
 
         #FedMinMax
-        self.lr_mu = 0.01 # Adversary learning rate
+        self.lr_mu = 0.05 # Adversary learning rate
 
 
     def update_running_average(self, new_state_dict):
@@ -92,8 +95,9 @@ class FedMinMaxServer:
         """Returns the global model weights (on CPU) and group weights to be sent to clients."""
 
         # Avoid division by zero
-        w_vector = self.mu / (self.rho + 1e-10) 
         
+        
+        w_vector = self.mu / (self.rho + 1e-10) 
         # Convert to dict for easier client consumption
         w_dict = {gid: w_vector[self.gid_to_idx[gid]].item() for gid in self.group_ids}
         
@@ -145,31 +149,31 @@ class FedMinMaxServer:
         Returns: Dict {Accuracy, balanced Accuracy, SP, EO}
         """
         self.global_model.eval()
-
         if final:
             eval_X = self.X_test
             eval_y = self.y_test
-            eval_s = self.s_test
+            eval_s = self.s_test_orig
         else:
             eval_X = self.x_val
             eval_y = self.y_val
-            eval_s = self.s_val  
+            eval_s = self.s_val_orig
         with torch.no_grad():
-            
             logits = self.global_model(eval_X)
-            preds = (logits > 0.5).float()
-            
+            probs = torch.sigmoid(logits)
+            preds = (probs > 0.5).float()
+            print(f"preds len: {len(preds)}, eval_y len: {len(eval_y)}, eval_s len: {len(eval_s)}")
+
             # Accuracy
             acc = accuracy_score(eval_y.cpu(), preds.cpu())
 
             # Prepare tensors (Ensure they are flat 1D arrays)
             y_flat = eval_y.view(-1)
-            s_flat = eval_s.view(-1)
+            s_orig_flat = eval_s.view(-1)
             preds_flat = preds.view(-1)
 
             # 2. Compute Fairness Metrics using new functions
-            stat_parity = compute_statistical_parity(preds_flat, s_flat)
-            eq_odds = compute_equalized_odds(preds_flat, y_flat, s_flat)
+            stat_parity = compute_statistical_parity(preds_flat, s_orig_flat)
+            eq_odds = compute_equalized_odds(preds_flat, y_flat, s_orig_flat)
             balAcc = compute_balanced_accuracy(preds_flat, y_flat)
 
             return {
@@ -179,4 +183,4 @@ class FedMinMaxServer:
                 "Equalized_Odds": eq_odds,
                 "Lambda": self.global_lambda
             }
-
+        

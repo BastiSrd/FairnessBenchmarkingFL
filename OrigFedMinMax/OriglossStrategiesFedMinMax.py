@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-
 def project_simplex(v, eps=0.0, device="cpu"):
     """
     Project v onto the simplex {x: sum x = 1, x_i >= eps}.
@@ -49,13 +48,12 @@ def project_simplex(v, eps=0.0, device="cpu"):
     return torch.tensor(x, device=device)
 
 # --- Client Strategy: FedMinMax Loss ---
-def loss_fedminmax(outputs, targets, sensitive_attrs, context):
+def loss_Origfedminmax(outputs, targets, sensitive_attrs, context):
     """
     Calculates weighted loss based on global importance weights (w).
-    Eq (8): r_k(theta, w) = sum( (n_ak/n_k) * w_a * r_ak(theta) )[cite: 222].
     """
     weights_dict = context.get('group_weights', {})
-    criterion_elementwise = nn.BCELoss(reduction='none')
+    criterion_elementwise = nn.BCEWithLogitsLoss(reduction='none')
 
     # Ensure integer group ids for masking
     s = sensitive_attrs.view(-1).long()
@@ -70,11 +68,11 @@ def loss_fedminmax(outputs, targets, sensitive_attrs, context):
         mask = (s == gid_int)
         if mask.any():
             sample_weights[mask] = float(weight)
-
-    return (loss_per_sample * sample_weights).sum() / len(targets)
+    weighted = loss_per_sample * sample_weights
+    return weighted.mean()
 
 # --- Server Strategy: FedMinMax Aggregation ---
-def agg_fedminmax(client_reports, global_model, device, server_state):
+def agg_Origfedminmax(client_reports, global_model, device, server_state):
     """
     1. Aggregates model weights (Standard FedAvg).
     2. Updates adversarial weights mu based on reported group risks.
