@@ -15,7 +15,7 @@ from EOFedMinMax.EOlossStrategiesFedMinMax import agg_EOfedminmax, loss_EOfedmin
 # --- Configuration ---
 ALGORITHM = 'FedMinMax'  # Options: 'FedAvg', 'FedMinMax', 'TrustFed', 'Fairness' / only FedAvg currently implemented
 LOADER = '3_clients'     # Options: '3_clients', '5_clients', 'random'
-ROUNDS = 25
+ROUNDS = 10
 CLIENT_EPOCHS = 1
 LR = 0.001
 
@@ -37,11 +37,11 @@ def runFLSimulation():
     #Load Data
     print("Loading data...")
     if LOADER == '3_clients':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_age3() # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_adult_data.load_adult_age3() # replace function if other Dataset wanted
     elif LOADER == '5_clients':
-        data_dict, X_test, y_test, s_list, _, _ = load_adult_data.load_adult_age5() # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot  = load_bank_data.load_bank_age_5() # replace function if other Dataset wanted
     elif LOADER == 'random':
-        data_dict, X_test, y_test, s_list, _, _ = load_adult_data.load_adult_random() # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot  = load_adult_data.load_adult_random(10) # replace function if other Dataset wanted
     else:
         raise ValueError(f"Unknown loader: {LOADER}")
 
@@ -64,7 +64,7 @@ def runFLSimulation():
     elif ALGORITHM == "FedMinMax":
         client_loss = loss_fedminmax
         server_agg = agg_fedminmax
-        server = FedMinMaxServer((X_test, y_test, s_list), input_dim, device)
+        server = FedMinMaxServer((X_test, y_test, s_list, X_val, y_val, sval_list), input_dim, device)
         clients = []
         for c_name, c_data in data_dict.items():
             clients.append(FedMinMaxClient(c_name, c_data, input_dim, device))
@@ -76,8 +76,11 @@ def runFLSimulation():
         server_agg = agg_EOfedminmax
         s_test_tensor = torch.tensor(s_list).long()
         y_test_tensor = y_test.view(-1).long()
-        s_joint_test = (s_test_tensor * 2 + y_test_tensor).tolist()     
-        server = EOFedMinMaxServer((X_test, y_test, s_joint_test), input_dim, device)
+        s_joint_test = (s_test_tensor * 2 + y_test_tensor).tolist()
+        s_val_tensor = torch.tensor(sval_list).long()
+        y_val_tensor = y_val.view(-1).long()
+        s_joint_val = (s_val_tensor * 2 + y_val_tensor).tolist() 
+        server = EOFedMinMaxServer((X_test, y_test, s_joint_test, X_val, y_val, s_joint_val), input_dim, device)
         clients = []
         for c_name, c_data in data_dict.items():
             clients.append(EOFedMinMaxClient(c_name, c_data, input_dim, device))
@@ -89,6 +92,10 @@ def runFLSimulation():
 
 def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg, data_dict):
     #Track best round per metric
+
+    best_blAcc_value = -1.0
+    best_round_blAcc = -1
+
     best_acc_value = -1.0
     best_round_acc = -1
 
@@ -144,13 +151,6 @@ def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_ag
         #Server Aggregation
         server.aggregate(client_reports, server_agg)
 
-        # After server.aggregate(...)
-        risk_vec = None
-        if hasattr(server, "mu") and hasattr(server, "group_ids"):
-            # If your aggregate passes back debug info some other way, fetch it here.
-            # If you stored it in server_state only, easiest is to also store it in server during aggregate.
-            pass
-        server.log_fedminmax_state(round_idx=r+1, risk_vector=server._last_risk_vector, top_k=10)
 
         #Evaluate
         metrics = server.evaluate()
@@ -160,6 +160,10 @@ def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_ag
         if metrics["Accuracy"] > best_acc_value:
             best_acc_value = metrics["Accuracy"]
             best_round_acc = r + 1
+
+        if metrics["balanced_Accuracy"] > best_blAcc_value:
+            best_blAcc_value = metrics["balanced_Accuracy"]
+            best_round_blAcc = r + 1
 
         if abs(metrics["Statistical_Parity"]) < best_sp_value and abs(metrics["Statistical_Parity"]) > 0:
             best_sp_value = abs(metrics["Statistical_Parity"])
@@ -172,39 +176,46 @@ def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_ag
         print(
             f"Results Round {r+1}: "
             f"Acc={metrics['Accuracy']:.4f}, "
-            f"SP={metrics['Statistical_Parity']:.10f}, "
-            f"EO={metrics['Equalized_Odds']:.10f}"
+            f"Balanced Acc={metrics['balanced_Accuracy']:.4f}, "
+            f"SP={metrics['Statistical_Parity']:.4f}, "
+            f"EO={metrics['Equalized_Odds']:.4f}"
         )
     
     #Apply the averaged model as the final test
     server.load_averaged_model()
     metrics = server.evaluate()
-    logger.log_round(ROUNDS+1, metrics)
+    logger.log_round(r+2, metrics)
 
     #Track best round for each metric
     if metrics["Accuracy"] > best_acc_value:
         best_acc_value = metrics["Accuracy"]
-        best_round_acc = ROUNDS+1
+        best_round_acc = r + 2
+
+    if metrics["balanced_Accuracy"] > best_blAcc_value:
+        best_blAcc_value = metrics["balanced_Accuracy"]
+        best_round_blAcc = r + 2
 
     if abs(metrics["Statistical_Parity"]) < best_sp_value:
         best_sp_value = abs(metrics["Statistical_Parity"])
-        best_round_sp = ROUNDS+1
+        best_round_sp = r+2
 
     if metrics["Equalized_Odds"] < best_eo_value:
         best_eo_value = metrics["Equalized_Odds"]
-        best_round_eo = ROUNDS+1
+        best_round_eo = r+2
 
     print(
-        f"Results Averaged Model: "
-        f"Acc={metrics['Accuracy']:.4f}, "
-        f"SP={metrics['Statistical_Parity']:.10f}, "
-        f"EO={metrics['Equalized_Odds']:.10f}"
-    )
+            f"Results Round {r+2}: "
+            f"Acc={metrics['Accuracy']:.4f}, "
+            f"Balanced Acc={metrics['balanced_Accuracy']:.4f}, "
+            f"SP={metrics['Statistical_Parity']:.4f}, "
+            f"EO={metrics['Equalized_Odds']:.4f}"
+        )
 
 
     #Save best metrics to CSV and .log
     logger.best_metrics = {
     "Accuracy": {"round": best_round_acc, "value": best_acc_value},
+    "balanced_Accuracy": {"round": best_round_blAcc, "value": best_blAcc_value},
     "Statistical_Parity": {"round": best_round_sp, "value": best_sp_value},
     "Equalized_Odds": {"round": best_round_eo, "value": best_eo_value}
     }
@@ -219,6 +230,9 @@ def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_ag
 
 def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg, data_dict):
     #Track best round per metric
+    best_blAcc_value = -1.0
+    best_round_blAcc = -1
+
     best_acc_value = -1.0
     best_round_acc = -1
 
@@ -271,22 +285,19 @@ def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg,
         #Server Aggregation
         server.aggregate(client_reports, server_agg)
 
-        # After server.aggregate(...)
-        risk_vec = None
-        if hasattr(server, "mu") and hasattr(server, "group_ids"):
-            # If your aggregate passes back debug info some other way, fetch it here.
-            # If you stored it in server_state only, easiest is to also store it in server during aggregate.
-            pass
-        server.log_fedminmax_state(round_idx=r+1, risk_vector=server._last_risk_vector, top_k=10)
 
         #Evaluate
-        metrics = server.evaluate()
+        metrics = server.evaluate(final=False)
         logger.log_round(r + 1, metrics)
 
         #Track best round for each metric
         if metrics["Accuracy"] > best_acc_value:
             best_acc_value = metrics["Accuracy"]
             best_round_acc = r + 1
+
+        if metrics["balanced_Accuracy"] > best_blAcc_value:
+            best_blAcc_value = metrics["balanced_Accuracy"]
+            best_round_blAcc = r + 1
 
         if abs(metrics["Statistical_Parity"]) < best_sp_value:
             best_sp_value = abs(metrics["Statistical_Parity"])
@@ -298,40 +309,47 @@ def runFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg,
 
         print(
             f"Results Round {r+1}: "
-            f"Acc={metrics['Accuracy']:.4f}, "
-            f"SP={metrics['Statistical_Parity']:.10f}, "
-            f"EO={metrics['Equalized_Odds']:.10f}"
+            f"Acc={metrics['Accuracy']:.8f}, "
+            f"Balanced Acc={metrics['balanced_Accuracy']:.8f}, "
+            f"SP={metrics['Statistical_Parity']:.8f}, "
+            f"EO={metrics['Equalized_Odds']:.8f}"
         )
     
     #Apply the averaged model as the final test
     server.load_averaged_model()
-    metrics = server.evaluate()
-    logger.log_round(ROUNDS+1, metrics)
+    metrics = server.evaluate(final= True)
+    logger.log_round(r+2, metrics)
 
     #Track best round for each metric
     if metrics["Accuracy"] > best_acc_value:
         best_acc_value = metrics["Accuracy"]
-        best_round_acc = ROUNDS+1
+        best_round_acc = r+2
+
+    if metrics["balanced_Accuracy"] > best_blAcc_value:
+        best_blAcc_value = metrics["balanced_Accuracy"]
+        best_round_blAcc = r + 2
 
     if abs(metrics["Statistical_Parity"]) < best_sp_value:
         best_sp_value = abs(metrics["Statistical_Parity"])
-        best_round_sp = ROUNDS+1
+        best_round_sp = r+2
 
     if metrics["Equalized_Odds"] < best_eo_value:
         best_eo_value = metrics["Equalized_Odds"]
-        best_round_eo = ROUNDS+1
+        best_round_eo = r+2
 
     print(
-        f"Results Averaged Model: "
-        f"Acc={metrics['Accuracy']:.4f}, "
-        f"SP={metrics['Statistical_Parity']:.10f}, "
-        f"EO={metrics['Equalized_Odds']:.10f}"
-    )
+            f"Results Round {r+2}: "
+            f"Acc={metrics['Accuracy']:.8f}, "
+            f"Balanced Acc={metrics['balanced_Accuracy']:.8f}, "
+            f"SP={metrics['Statistical_Parity']:.8f}, "
+            f"EO={metrics['Equalized_Odds']:.8f}"
+        )
 
 
     #Save best metrics to CSV and .log
     logger.best_metrics = {
     "Accuracy": {"round": best_round_acc, "value": best_acc_value},
+    "balanced_Accuracy": {"round": best_round_blAcc, "value": best_blAcc_value},
     "Statistical_Parity": {"round": best_round_sp, "value": best_sp_value},
     "Equalized_Odds": {"round": best_round_eo, "value": best_eo_value}
     }

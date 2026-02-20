@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score
-from models import modelFedMinMax
-from fairnessMetrics import compute_statistical_parity, compute_equalized_odds
+from models import simpleModel
+from fairnessMetrics import compute_statistical_parity, compute_equalized_odds, compute_balanced_accuracy
 
 class FedMinMaxServer:
     def __init__(self, test_data, input_dim, device='cpu'):
@@ -22,9 +22,14 @@ class FedMinMaxServer:
             self.s_test = torch.tensor(test_data[2], dtype=torch.float32).to(self.device).view(-1, 1)
         else:
             self.s_test = test_data[2].to(self.device).view(-1, 1)
-
+        self.x_val = test_data[3].to(self.device)
+        self.y_val = test_data[4].to(self.device).view(-1, 1)
+        if isinstance(test_data[5], list):
+            self.s_val = torch.tensor(test_data[5], dtype=torch.float32).to(self.device).view(-1, 1)
+        else:
+            self.s_val = test_data[5].to(self.device).view(-1, 1)
         #Initialize Global Model
-        self.global_model = modelFedMinMax(input_dim).to(self.device)
+        self.global_model = simpleModel(input_dim).to(self.device)
         self._avg_state = None   # dict[str, torch.Tensor]
         self._avg_t = 0          # how many rounds have been averaged
 
@@ -36,7 +41,7 @@ class FedMinMaxServer:
         self.device = device
 
         #FedMinMax
-        self.lr_mu = 0.1 # Adversary learning rate
+        self.lr_mu = 0.01 # Adversary learning rate
 
 
     def update_running_average(self, new_state_dict):
@@ -126,11 +131,6 @@ class FedMinMaxServer:
         # Execute Strategy
         new_weights = agg_strategy(client_reports, self.global_model, self.device, server_state)
 
-        # Store debug info if strategy set it
-        if 'debug_risk_vector' in server_state:
-            self._last_risk_vector = server_state['debug_risk_vector'].detach().clone()
-        else:
-            self._last_risk_vector = None
         
         # Update Global Model and average model for final output
         self.global_model.load_state_dict(new_weights)
@@ -139,78 +139,44 @@ class FedMinMaxServer:
         # Update internal mu (Strategies might update state in place, but good to be explicit)
         self.mu = server_state['mu']
 
-    def evaluate(self):
+    def evaluate(self, final=False):
         """
         Runs inference on the global test set and computes metrics.
-        Returns: Dict {Accuracy, SP, EO}
+        Returns: Dict {Accuracy, balanced Accuracy, SP, EO}
         """
         self.global_model.eval()
+
+        if final:
+            eval_X = self.X_test
+            eval_y = self.y_test
+            eval_s = self.s_test
+        else:
+            eval_X = self.x_val
+            eval_y = self.y_val
+            eval_s = self.s_val  
         with torch.no_grad():
-            logits = self.global_model(self.X_test)
+            
+            logits = self.global_model(eval_X)
             preds = (logits > 0.5).float()
             
             # Accuracy
-            acc = accuracy_score(self.y_test.cpu(), preds.cpu())
+            acc = accuracy_score(eval_y.cpu(), preds.cpu())
 
             # Prepare tensors (Ensure they are flat 1D arrays)
-            y_flat = self.y_test.view(-1)
-            s_flat = self.s_test.view(-1)
+            y_flat = eval_y.view(-1)
+            s_flat = eval_s.view(-1)
             preds_flat = preds.view(-1)
 
             # 2. Compute Fairness Metrics using new functions
             stat_parity = compute_statistical_parity(preds_flat, s_flat)
             eq_odds = compute_equalized_odds(preds_flat, y_flat, s_flat)
+            balAcc = compute_balanced_accuracy(preds_flat, y_flat)
 
             return {
                 "Accuracy": acc,
+                "balanced_Accuracy": balAcc,
                 "Statistical_Parity": stat_parity,
                 "Equalized_Odds": eq_odds,
                 "Lambda": self.global_lambda
             }
-        
 
-    def log_fedminmax_state(self, round_idx, risk_vector=None, top_k=5):
-        """
-        Logs mu, rho, w=mu/rho and optionally the per-group global risk_vector used to update mu.
-        Assumes: self.group_ids, self.mu, self.rho, self.gid_to_idx exist.
-        """
-        with torch.no_grad():
-            mu = self.mu.detach().cpu()
-            rho = self.rho.detach().cpu()
-            w = (mu / (rho + 1e-12)).cpu()
-
-            gids = list(self.group_ids)
-
-            # Build printable rows
-            rows = []
-            for i, gid in enumerate(gids):
-                r = None
-                if risk_vector is not None:
-                    r = float(risk_vector[i].detach().cpu())
-                rows.append((gid, float(rho[i]), float(mu[i]), float(w[i]), r))
-
-            # Sort by risk (if available) else by w
-            if risk_vector is not None:
-                rows_sorted = sorted(rows, key=lambda x: (x[4] if x[4] is not None else -1e9), reverse=True)
-                criterion = "risk"
-            else:
-                rows_sorted = sorted(rows, key=lambda x: x[3], reverse=True)
-                criterion = "w"
-
-            print(f"\n[Round {round_idx}] FedMinMax Server State")
-            print(f"  Sum(mu)={mu.sum().item():.6f}  min(mu)={mu.min().item():.6f}  max(mu)={mu.max().item():.6f}")
-            print(f"  Sum(rho)={rho.sum().item():.6f}  min(rho)={rho.min().item():.6f}  max(rho)={rho.max().item():.6f}")
-            print(f"  w stats: min(w)={w.min().item():.6f}  max(w)={w.max().item():.6f}")
-
-            header = "  gid |   rho    |    mu    |   w=mu/rho  "
-            if risk_vector is not None:
-                header += "|   risk"
-            print(header)
-            print("  " + "-" * (len(header)-2))
-
-            for tup in rows_sorted[:top_k]:
-                gid, rho_i, mu_i, w_i, r_i = tup
-                if r_i is None:
-                    print(f"  {gid:>3} | {rho_i:8.4f} | {mu_i:8.4f} | {w_i:10.4f}")
-                else:
-                    print(f"  {gid:>3} | {rho_i:8.4f} | {mu_i:8.4f} | {w_i:10.4f} | {r_i:7.4f}")

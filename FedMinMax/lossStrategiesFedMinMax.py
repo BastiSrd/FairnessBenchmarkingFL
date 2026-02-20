@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-# --- Helper: Euclidean Projection onto Simplex ---
-def project_simplex(v, eps=0.0):
+
+def project_simplex(v, eps=0.0, device="cpu"):
     """
     Project v onto the simplex {x: sum x = 1, x_i >= eps}.
     If eps=0.0, this reduces to the standard probability simplex projection.
@@ -46,7 +46,7 @@ def project_simplex(v, eps=0.0):
     x = np.maximum(x, eps)
     x /= x.sum()
 
-    return torch.tensor(x, device="cpu")
+    return torch.tensor(x, device=device)
 
 # --- Client Strategy: FedMinMax Loss ---
 def loss_fedminmax(outputs, targets, sensitive_attrs, context):
@@ -63,7 +63,7 @@ def loss_fedminmax(outputs, targets, sensitive_attrs, context):
     o = outputs.view(-1)
 
     loss_per_sample = criterion_elementwise(o, y)
-    sample_weights = torch.zeros_like(loss_per_sample)
+    sample_weights = torch.ones_like(loss_per_sample)
 
     for gid, weight in weights_dict.items():
         gid_int = int(gid)
@@ -116,10 +116,8 @@ def agg_fedminmax(client_reports, global_model, device, server_state):
         if denom > 0:
             risk_vector[i] = numerator / denom
 
-    mu_new = project_simplex(mu + lr_mu * risk_vector, eps=1e-3)
+    mu_new = project_simplex(mu + lr_mu * risk_vector, eps=1e-3, device=device)
     server_state['mu'] = mu_new
 
-    # DEBUG: attach for logging (optional)
-    server_state['debug_risk_vector'] = risk_vector.detach().clone()
 
     return avg_weights

@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from models import modelFedMinMax
+from models import simpleModel
 
 class FedMinMaxClient:
     def __init__(self, client_name, data_dict, input_dim, device='cuda'):
@@ -22,14 +22,16 @@ class FedMinMaxClient:
         
         #Reshape y and s to (N, 1) to match model output shape
         self.y = data_dict['y'].to(device).view(-1, 1)
-        self.s = data_dict['s'].to(device).view(-1, 1)
+        
+
+        self.s = data_dict['s'].to(device).long().view(-1, 1)
         
         #Create a DataLoader for batching (Standard SGD)
         dataset = TensorDataset(self.X, self.y, self.s)
-        self.loader = DataLoader(dataset, batch_size=len(self.X), shuffle=True)
+        self.loader = DataLoader(dataset, batch_size=len(self.X), shuffle=True) 
         
         #Initialize Model
-        self.model = modelFedMinMax(input_dim).to(device)
+        self.model = simpleModel(input_dim).to(device)
         
         #Define Standard Criterion (Base Loss)
         self.criterion = nn.BCELoss()
@@ -59,7 +61,7 @@ class FedMinMaxClient:
             outputs = self.model(self.X)
             
             for gid in unique_groups:
-                gid = gid.item()
+                gid = int(gid.item())
                 mask = (self.s == gid).squeeze()
                 if mask.sum() == 0: continue
                 
@@ -82,21 +84,8 @@ class FedMinMaxClient:
             strategy_context (dict): Extra data needed for the strategy (e.g., lambda).
         """
 
-        # ---------- DEBUG LOG: client-side FedMinMax ----------
-        # Print once per client to avoid spam
-        if not hasattr(self, "_fedminmax_logged"):
 
-            # Local groups present on this client
-            s_local = self.s.view(-1).long()
-            local_gids = torch.unique(s_local).tolist()
-
-            # Weights received from server (must be keyed by TRUE group IDs)
-            group_weights = strategy_context.get("group_weights", {})
-            received = {int(gid): group_weights.get(int(gid), None) for gid in local_gids}
-
-            print(f"[Client {self.name}] local_gids={local_gids} received_weights={received}")
-        # -----------------------------------------------------
-
+        
         initial_group_risks, group_counts = self.evaluate_group_risks()
         
         self.model.train()
@@ -129,7 +118,7 @@ class FedMinMaxClient:
             #Average loss for this epoch
             epoch_loss += batch_loss_sum / len(self.loader)
         print(f"{self.name} loss: {epoch_loss / epochs}")
-
+        
         #Return a report dictionary to the Server
         return {
             'client_name': self.name,

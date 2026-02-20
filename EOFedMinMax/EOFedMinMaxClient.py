@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from models import modelFedMinMax
+from models import simpleModel
 
 class EOFedMinMaxClient:
     def __init__(self, client_name, data_dict, input_dim, device='cuda'):
@@ -30,7 +30,7 @@ class EOFedMinMaxClient:
         self.loader = DataLoader(dataset, batch_size=len(self.X), shuffle=True)
         
         #Initialize Model
-        self.model = modelFedMinMax(input_dim).to(device)
+        self.model = simpleModel(input_dim).to(device)
         
         #Define Standard Criterion (Base Loss)
         self.criterion = nn.BCELoss()
@@ -83,20 +83,6 @@ class EOFedMinMaxClient:
             strategy_context (dict): Extra data needed for the strategy (e.g., lambda).
         """
 
-        # ---------- DEBUG LOG: client-side FedMinMax ----------
-        # Print once per client to avoid spam
-        if not hasattr(self, "_fedminmax_logged"):
-
-            # Local groups present on this client
-            s_local = self.s.view(-1).long()
-            local_gids = torch.unique(s_local).tolist()
-
-            # Weights received from server (must be keyed by TRUE group IDs)
-            group_weights = strategy_context.get("group_weights", {})
-            received = {int(gid): group_weights.get(int(gid), None) for gid in local_gids}
-
-            print(f"[Client {self.name}] local_gids={local_gids} received_weights={received}")
-        # -----------------------------------------------------
 
         initial_group_risks, group_counts = self.evaluate_group_risks()
         
