@@ -147,7 +147,7 @@ def runFLSimulation(loaderID, algorithmID, trustfedFairness: Optional[str] = Non
             input_dim=input_dim,
             device=device,
             logger=logger,
-            fairness_notion=TRUSTFED_FAIRNESS,
+            fairness_notion=trustfedFairness,
             p_norm=TRUSTFED_P_NORM,
         )
 
@@ -624,8 +624,8 @@ def run_trustfed_once(
         last_metrics = metrics
         logger.log_round(r + 1, metrics)
 
-        if metrics["Balanced_Accuracy"] > best_balanced_acc_value:
-            best_balanced_acc_value = metrics["Balanced_Accuracy"]
+        if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+            best_balanced_acc_value = metrics["balanced_Accuracy"]
             best_round_balanced_acc = r + 1
 
         if metrics["Accuracy"] > best_acc_value:
@@ -642,7 +642,7 @@ def run_trustfed_once(
 
         print(
             f"Results Round {r + 1}: "
-            f"Balanced_Acc={metrics['Balanced_Accuracy']:.4f}, "
+            f"Balanced_Acc={metrics['balanced_Accuracy']:.4f}, "
             f"Acc={metrics['Accuracy']:.4f}, "
             f"SP={metrics['Statistical_Parity']:.10f}, "
             f"EO={metrics['Equalized_Odds']:.10f}"
@@ -660,6 +660,8 @@ def run_trustfed_once(
 
 
 if __name__ == "__main__":
+
+    
     LOADERS = [
     "adult_iid5", "adult_iid10", "adult_age3", "adult_age5", 
     "bank_iid5", "bank_iid10", "bank_age3", "bank_age5", 
@@ -669,17 +671,14 @@ if __name__ == "__main__":
     ]
     ALGORITHMS = ['FedAvg', 'FedMinMax', "EOFedMinMax", 'TrustFed']
     TRUSTFED_FAIRNESS = ["SP", "EO"]  # "SP" or "EO"
-    for algorithm in ALGORITHMS:
-        if algorithm == "TrustFed":
+    NUM_RUNS = 3
+    for run_idx in range(NUM_RUNS):
+        print(f"=== Starting Experimental Run {run_idx + 1}/{NUM_RUNS} ===")
+        for algorithm in ALGORITHMS:
+            if algorithm == "TrustFed":
+                for loader in LOADERS:
+                    for fairness in TRUSTFED_FAIRNESS:
+                        runFLSimulation(loaderID=loader, algorithmID=algorithm, trustfedFairness=fairness)
             for loader in LOADERS:
-                for fairness in TRUSTFED_FAIRNESS:
-                    runFLSimulation(loaderID=loader, algorithmID=algorithm, trustfedFairness=fairness)
-        for loader in LOADERS:
-            runFLSimulation(loaderID=loader, algorithmID=algorithm)
-
-    print("\n=======================================================")
-    print("Triggering Global Group benchmark script...")
-    print("=======================================================")
+                runFLSimulation(loaderID=loader, algorithmID=algorithm)
     
-    import subprocess
-    subprocess.run(["python", "run_benchmark.py"], check=True)

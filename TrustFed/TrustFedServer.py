@@ -55,7 +55,7 @@ class TrustFedServer:
                 "Accuracy": acc,
                 "Statistical_Parity": stat_parity,
                 "Equalized_Odds": eq_odds,
-                "Balanced_Accuracy": balanced_accuracy,
+                "balanced_Accuracy": balanced_accuracy,
                 "Alpha": self.alpha,
                 "FairnessNotion": self.fairness_notion,
             }
