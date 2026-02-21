@@ -25,7 +25,7 @@ from logger import FLLogger
 #LOADER = '3_clients'  # Options: '3_clients', '5_clients', 'random'
 
 # --- Trainingskonstanten for Benchmark
-ROUNDS = 3
+ROUNDS = 50
 CLIENT_EPOCHS = 1
 LR = 0.005
 
@@ -679,6 +679,7 @@ if __name__ == "__main__":
                 for loader in LOADERS:
                     for fairness in TRUSTFED_FAIRNESS:
                         runFLSimulation(loaderID=loader, algorithmID=algorithm, trustfedFairness=fairness)
-            for loader in LOADERS:
-                runFLSimulation(loaderID=loader, algorithmID=algorithm)
-    
+            else:
+                for loader in LOADERS:
+                    runFLSimulation(loaderID=loader, algorithmID=algorithm)
+

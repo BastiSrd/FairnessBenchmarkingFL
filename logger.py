@@ -27,7 +27,7 @@ class FLLogger:
             - summary.json: containing configuration and best metrics for Accuracy, Statistical Parity, Equalized Odds
         """
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.run_dir = f"logs/run_{timestamp}"
+        self.run_dir = f"logs/run_{algorithm}_{loader}_{timestamp}"
         os.makedirs(self.run_dir, exist_ok=True)
 
         #Track best metrics
@@ -168,7 +168,7 @@ class FLLogger:
             "config": self.config,
             "best_metrics": self.best_metrics
         }
-
+        full_summary["config"]["endTime"] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         summary_path = os.path.join(self.run_dir, "summary.json")
         with open(summary_path, "w") as f:
             json.dump(full_summary, f, indent=4)
