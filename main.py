@@ -428,3 +428,10 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
 
 if __name__ == "__main__":
     runFLSimulation()
+
+    print("\n=======================================================")
+    print("Triggering Global Group benchmark script...")
+    print("=======================================================")
+    
+    import subprocess
+    subprocess.run(["python", "run_benchmark.py"], check=True)

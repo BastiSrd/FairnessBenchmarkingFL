@@ -27,8 +27,8 @@ def build_model_class(input_size):
     class NNModel(torch.nn.Module):
         def __init__(self, input_size=input_size, output_size=1):
             super(NNModel, self).__init__()
-            self.linear1 = torch.nn.Linear(input_size, 32)
-            self.linear2 = torch.nn.Linear(32, output_size)
+            self.linear1 = torch.nn.Linear(input_size, 64)
+            self.linear2 = torch.nn.Linear(64, output_size)
 
         def forward(self, x):
             x = torch.relu(self.linear1(x))
@@ -39,48 +39,53 @@ def build_model_class(input_size):
 # 2. Hyperparameters
 # -----------------------------
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-CLIENT_EPOCHS = 3
-CLIENT_BATCHSIZE = 64
-CLIENT_STEPSIZE = 0.01
+CLIENT_EPOCHS = 1
+CLIENT_BATCHSIZE = 32
+CLIENT_STEPSIZE = 0.001
 COMMUNICATION_ROUNDS = 50
 NY = 100  # number of points in Y sets for fairness
-LAMBDA = 0.5
+LAMBDA = 0.2
 
 # -----------------------------
 # 3. Dynamic Dataset Selection
 # -----------------------------
 parser = argparse.ArgumentParser(description="Run Fairness Benchmarking")
-parser.add_argument("--loader", type=str, default="adult_iid", 
+parser.add_argument("--loader", type=str, default="adult_iid5", 
                     choices=[
-                        "adult_iid", "adult_age3", "adult_age5",
-                        "bank_iid", "bank_age3", "bank_age5",
-                        "kdd_iid", "kdd_age3", "kdd_age5",
-                        "acs_iid", "acs_state3", "acs_state5",
-                        "cac_iid", "cac_state3", "cac_state5"
+                        "adult_iid5", "adult_iid10", "adult_age3", "adult_age5",
+                        "bank_iid5", "bank_iid10", "bank_age3", "bank_age5",
+                        "kdd_iid5", "kdd_iid10", "kdd_age3", "kdd_age5",
+                        "acs_iid5", "acs_iid10", "acs_state3", "acs_state5",
+                        "cac_iid5", "cac_iid10", "cac_state3", "cac_state5"
                     ],
                     help="Choose the dataset and split type")
 
 args = parser.parse_args()
 
 loader_map = {
-    # Adult
-    "adult_iid": lambda: load_adult_random(num_clients=5),
+   # Adult
+    "adult_iid5": lambda: load_adult_random(num_clients=5),
+    "adult_iid10": lambda: load_adult_random(num_clients=10),
     "adult_age3": load_adult_age3,
     "adult_age5": load_adult_age5,
     # Bank
-    "bank_iid": lambda: load_bank_random(num_clients=5),
+    "bank_iid5": lambda: load_bank_random(num_clients=5),
+    "bank_iid10": lambda: load_bank_random(num_clients=10),
     "bank_age3": load_bank_age3,
     "bank_age5": load_bank_age_5, 
     # KDD
-    "kdd_iid": lambda: load_kdd_random(num_clients=5),
+    "kdd_iid5": lambda: load_kdd_random(num_clients=5),
+    "kdd_iid10": lambda: load_kdd_random(num_clients=10),
     "kdd_age3": load_kdd_age3,
     "kdd_age5": load_kdd_age5,
     # ACS
-    "acs_iid": lambda: load_acs_random(num_clients=5),
+    "acs_iid5": lambda: load_acs_random(num_clients=5),
+    "acs_iid10": lambda: load_acs_random(num_clients=10),
     "acs_state3": load_acs_states_3,
     "acs_state5": load_acs_states_5,
     # CAC
-    "cac_iid": lambda: load_cac_random(num_clients=5),
+    "cac_iid5": lambda: load_cac_random(num_clients=5),
+    "cac_iid10": lambda: load_cac_random(num_clients=10),
     "cac_state3": load_cac_states_3,
     "cac_state5": load_cac_states_5,
 }
@@ -95,6 +100,10 @@ raw_data = loader_map[args.loader]()
 X_test = X_test.float().to(DEVICE)
 y_test = y_test.float().to(DEVICE)
 s_test = torch.tensor(s_test_list, dtype=torch.float32).to(DEVICE)
+
+X_val = X_val.float().to(DEVICE)
+y_val = y_val.float().to(DEVICE)
+s_val = torch.tensor(s_val_list, dtype=torch.float32).to(DEVICE)
 
 # Convert dictionary to list of tuples for the Server (X, y, A)
 client_datasets = [
@@ -137,7 +146,7 @@ log_config = {
 }
 
 fl_logger = FLLogger(
-    algorithm="GlobalFairness", 
+    algorithm="Global_Group_Fairness_SP", 
     loader=args.loader,
     config=log_config
 )
@@ -152,10 +161,10 @@ def print_log_progress():
 
     server.model.eval() 
     with torch.no_grad():
-        all_probs = server.model(X_test).flatten()
+        all_probs = server.model(X_val).flatten()
         
-    all_labels = y_test.flatten()
-    all_sensitive = s_test.flatten()
+    all_labels = y_val.flatten()
+    all_sensitive = s_val.flatten()
 
   
     all_logits = torch.logit(all_probs, eps=1e-6) 
