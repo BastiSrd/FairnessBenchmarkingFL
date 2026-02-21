@@ -161,7 +161,6 @@ class OrigFedMinMaxServer:
             logits = self.global_model(eval_X)
             probs = torch.sigmoid(logits)
             preds = (probs > 0.5).float()
-            print(f"preds len: {len(preds)}, eval_y len: {len(eval_y)}, eval_s len: {len(eval_s)}")
 
             # Accuracy
             acc = accuracy_score(eval_y.cpu(), preds.cpu())

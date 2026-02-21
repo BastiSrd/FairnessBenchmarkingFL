@@ -109,11 +109,9 @@ def loss_EOfedminmax(outputs, targets, sensitive_attrs, context, device):
     
 
     fairness_loss = fairness_fpr + fairness_fnr
-    print("utility_loss: {:.4f}, fairness_loss: {:.4f} (fpr: {:.4f}, fnr: {:.4f}), lambda_eo: {:.4f}".format(
-        utility_loss.item(), fairness_loss.item(), fairness_fpr.item(), fairness_fnr.item(), lambda_eo
-    ))
+   
 
-    return utility_loss + lambda_eo * fairness_loss
+    return utility_loss + lambda_eo * (fairness_loss)
 
 
 # --- Server Strategy: FedAvg + EO adversary update ---

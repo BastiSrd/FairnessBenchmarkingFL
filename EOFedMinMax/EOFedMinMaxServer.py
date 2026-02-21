@@ -32,10 +32,10 @@ class EOFedMinMaxServer:
         self._avg_t = 0
 
         # adaptive lambda
-        self.global_lambda = 1.0
-        self.lambda_lr = 0.25      # how fast lambda adapts
+        self.global_lambda = 3.0
+        self.lambda_lr = 1.5      # how fast lambda adapts
         self.lambda_max = 5.0     # cap for stability
-        self.eo_target = 0.001     # target EO (you can tune)
+        self.eo_target = 0.00001     # target EO (you can tune)
 
         # adversary LR
         self.lr_mu = 0.05
@@ -124,7 +124,9 @@ class EOFedMinMaxServer:
 
         # proportional control
         err = eo - self.eo_target
-        self.global_lambda = float(np.clip(self.global_lambda + self.lambda_lr * err, 0.0, self.lambda_max))
+        
+        self.global_lambda = float(np.clip(self.global_lambda + self.lambda_lr * err, 0.001, self.lambda_max))
+      
 
     def initializeWeights(self):
         """
