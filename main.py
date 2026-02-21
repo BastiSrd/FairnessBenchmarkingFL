@@ -217,7 +217,7 @@ def runOrigFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_
 
 
         #Evaluate
-        metrics = server.evaluate()
+        metrics = server.evaluate(final=False)
         logger.log_round(r + 1, metrics)
 
         #Track best round for each metric
@@ -247,7 +247,7 @@ def runOrigFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_
     
     #Apply the averaged model as the final test
     server.load_averaged_model()
-    metrics = server.evaluate()
+    metrics = server.evaluate(final=True)
     logger.log_round(r+2, metrics)
 
     #Track best round for each metric
