@@ -1,143 +1,112 @@
 import torch
-import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from models import modelFedMinMax
 
+
 class EOFedMinMaxClient:
     def __init__(self, client_name, data_dict, input_dim, device='cuda'):
-        """
-        Args:
-            client_name (str): Identifier (e.g., "client_1").
-            data_dict (dict): From loader {'X': tensor, 'y': tensor, 's': tensor, ...}
-            input_dim (int): Number of features in X.
-            device (str): 'cpu' or 'cuda'.
-        """
         self.name = client_name
         self.device = device
-        
-        #move data to the device immediately to avoid transfer overhead later
-        self.X = data_dict['X'].to(device)
-        
-        #Reshape y and s to (N, 1) to match model output shape
-        self.y = data_dict['y'].to(device).view(-1, 1)
-        self.s_original = data_dict['s'].to(device).view(-1, 1)
-        self.s = (self.s_original * 2 + self.y).long() # This is now our "group"
-        
-        #Create a DataLoader for batching (Standard SGD)
+
+        # Ensure consistent dtypes/shapes
+        self.X = data_dict['X'].to(device).float()
+        self.y = data_dict['y'].to(device).float().view(-1, 1)
+        self.s = data_dict['s'].to(device).long().view(-1, 1)
+
         dataset = TensorDataset(self.X, self.y, self.s)
+        
         self.loader = DataLoader(dataset, batch_size=len(self.X), shuffle=True)
-        
-        #Initialize Model
+
         self.model = modelFedMinMax(input_dim).to(device)
-        
-        #Define Standard Criterion (Base Loss)
-        self.criterion = nn.BCELoss()
+
+        self.criterion = nn.BCEWithLogitsLoss()
 
     def set_parameters(self, global_weights):
-        """
-        Overwrites local model weights with the server's global weights.
-        """
         self.model.load_state_dict(global_weights)
 
-    def evaluate_group_risks(self):
+    def evaluate_group_eo_stats(self):
         """
-        Calculates risk (loss) per sensitive group on the CURRENT model weights.
-        Required for FedMinMax step 9.
+        Compute group-wise EO stats on CURRENT model:
+        - soft FPR proxy: mean(p) over y==0
+        - soft FNR proxy: mean(1-p) over y==1
+        Returns dicts + label-split counts.
         """
         self.model.eval()
-        criterion = nn.BCELoss(reduction='sum') # Sum to aggregate easier later
-        
-        group_risks = {}
-        group_counts = {}
-        
-        # Identify unique groups in local data
-        unique_groups = torch.unique(self.s)
-        
+
+        group_fpr = {}
+        group_fnr = {}
+        count_y0 = {}
+        count_y1 = {}
+
+        s = self.s.view(-1).long()
+        y = self.y.view(-1).float()
+
+        unique_groups = torch.unique(s)
+
         with torch.no_grad():
-            # Entire dataset forward pass (okay for small/medium data, batch if memory issues)
-            outputs = self.model(self.X)
-            
+            logits = self.model(self.X).view(-1).float()
+            p = torch.sigmoid(logits)
+
             for gid in unique_groups:
-                gid = gid.item()
-                mask = (self.s == gid).squeeze()
-                if mask.sum() == 0: continue
-                
-                loss = criterion(outputs[mask], self.y[mask])
-                count = mask.sum().item()
-                
-                group_risks[gid] = (loss / count).item() # Average risk
-                group_counts[gid] = count
-                
-        return group_risks, group_counts
+                gid_int = int(gid.item())
+                mask_g = (s == gid_int)
+                if not mask_g.any():
+                    continue
+
+                m0 = mask_g & (y < 0.5)
+                n0 = int(m0.sum().item())
+                if n0 > 0:
+                    group_fpr[gid_int] = float(p[m0].mean().item())
+                    count_y0[gid_int] = n0
+                else:
+                    count_y0[gid_int] = 0
+
+                m1 = mask_g & (y >= 0.5)
+                n1 = int(m1.sum().item())
+                if n1 > 0:
+                    group_fnr[gid_int] = float((1.0 - p[m1].mean()).item())
+                    count_y1[gid_int] = n1
+                else:
+                    count_y1[gid_int] = 0
+
+        return group_fpr, group_fnr, count_y0, count_y1
 
     def train(self, epochs, lr, loss_strategy, strategy_context):
-        """
-        Runs local training using the Strategy Pattern.
         
-        Args:
-            epochs (int): Number of local passes over data.
-            lr (float): Learning rate.
-            loss_strategy (func): Function that calculates loss (Standard or Fairness).
-            strategy_context (dict): Extra data needed for the strategy (e.g., lambda).
-        """
+        group_fpr, group_fnr, count_y0, count_y1 = self.evaluate_group_eo_stats()
 
-        # ---------- DEBUG LOG: client-side FedMinMax ----------
-        # Print once per client to avoid spam
-        if not hasattr(self, "_fedminmax_logged"):
-
-            # Local groups present on this client
-            s_local = self.s.view(-1).long()
-            local_gids = torch.unique(s_local).tolist()
-
-            # Weights received from server (must be keyed by TRUE group IDs)
-            group_weights = strategy_context.get("group_weights", {})
-            received = {int(gid): group_weights.get(int(gid), None) for gid in local_gids}
-
-            print(f"[Client {self.name}] local_gids={local_gids} received_weights={received}")
-        # -----------------------------------------------------
-
-        initial_group_risks, group_counts = self.evaluate_group_risks()
-        
         self.model.train()
-        
-        #Re-initialize optimizer every round to clear old momentum
         optimizer = optim.SGD(self.model.parameters(), lr=lr)
-        
-        #Inject dependencies into context for the strategy function
+
+        # Inject dependencies into context
         strategy_context['criterion'] = self.criterion
         strategy_context['device'] = self.device
-        
+
         epoch_loss = 0.0
-        
-        for epoch in range(epochs):
-            batch_loss_sum = 0
+        for _ in range(epochs):
+            batch_loss_sum = 0.0
             for batch_X, batch_y, batch_s in self.loader:
-                
                 optimizer.zero_grad()
-                
-                # Forward Pass
                 outputs = self.model(batch_X)
-                
-                loss = loss_strategy(outputs, batch_y, batch_s, strategy_context)
-                
+                loss = loss_strategy(outputs, batch_y, batch_s, strategy_context, device=self.device)
                 loss.backward()
                 optimizer.step()
-                
                 batch_loss_sum += loss.item()
-            
-            #Average loss for this epoch
             epoch_loss += batch_loss_sum / len(self.loader)
+
         print(f"{self.name} loss: {epoch_loss / epochs}")
 
-        #Return a report dictionary to the Server
         return {
             'client_name': self.name,
             'weights': {k: v.cpu() for k, v in self.model.state_dict().items()},
             'loss': epoch_loss / epochs,
             'samples': len(self.X),
-            # New fields for FedMinMax
-            'group_risks': initial_group_risks,
-            'group_counts': group_counts
+
+            # EO stats for server adversary update
+            'group_fpr': group_fpr,
+            'group_fnr': group_fnr,
+            'count_y0': count_y0,
+            'count_y1': count_y1
         }

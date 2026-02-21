@@ -5,7 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from models import modelFedMinMax
 
-class FedMinMaxClient:
+class OrigFedMinMaxClient:
     def __init__(self, client_name, data_dict, input_dim, device='cuda'):
         """
         Args:
@@ -18,11 +18,12 @@ class FedMinMaxClient:
         self.device = device
         
         #move data to the device immediately to avoid transfer overhead later
-        self.X = data_dict['X'].to(device)
+        self.X = data_dict['X'].to(device).float()
         
         #Reshape y and s to (N, 1) to match model output shape
-        self.y = data_dict['y'].to(device).view(-1, 1)
-        self.s = data_dict['s'].to(device).view(-1, 1)
+        self.y = data_dict['y'].to(device).float().view(-1, 1)
+        self.s_original = data_dict['s'].to(device).view(-1, 1)
+        self.s = (self.s_original * 2 + self.y).long() # This is now our "group"
         
         #Create a DataLoader for batching (Standard SGD)
         dataset = TensorDataset(self.X, self.y, self.s)
@@ -32,7 +33,7 @@ class FedMinMaxClient:
         self.model = modelFedMinMax(input_dim).to(device)
         
         #Define Standard Criterion (Base Loss)
-        self.criterion = nn.BCELoss()
+        self.criterion = nn.BCEWithLogitsLoss()
 
     def set_parameters(self, global_weights):
         """
@@ -46,7 +47,7 @@ class FedMinMaxClient:
         Required for FedMinMax step 9.
         """
         self.model.eval()
-        criterion = nn.BCELoss(reduction='sum') # Sum to aggregate easier later
+        criterion = nn.BCEWithLogitsLoss(reduction='sum') # Sum to aggregate easier later
         
         group_risks = {}
         group_counts = {}
@@ -82,20 +83,6 @@ class FedMinMaxClient:
             strategy_context (dict): Extra data needed for the strategy (e.g., lambda).
         """
 
-        # ---------- DEBUG LOG: client-side FedMinMax ----------
-        # Print once per client to avoid spam
-        if not hasattr(self, "_fedminmax_logged"):
-
-            # Local groups present on this client
-            s_local = self.s.view(-1).long()
-            local_gids = torch.unique(s_local).tolist()
-
-            # Weights received from server (must be keyed by TRUE group IDs)
-            group_weights = strategy_context.get("group_weights", {})
-            received = {int(gid): group_weights.get(int(gid), None) for gid in local_gids}
-
-            print(f"[Client {self.name}] local_gids={local_gids} received_weights={received}")
-        # -----------------------------------------------------
 
         initial_group_risks, group_counts = self.evaluate_group_risks()
         
