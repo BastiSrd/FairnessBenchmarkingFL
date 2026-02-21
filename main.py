@@ -32,7 +32,7 @@ TRUSTFED_P_NORM = 2
 def runFLSimulation():
     print(f"--- Starting FL Simulation: {ALGORITHM} on {LOADER} ---")
 
-    # Initialize Logger
+   #Initialize Logger
     logger = FLLogger(
         algorithm=ALGORITHM,
         loader=LOADER,
@@ -42,11 +42,11 @@ def runFLSimulation():
             "learning_rate": LR
         }
     )
-
-    # Load Data
+    
+    #Load Data
     print("Loading data...")
     if LOADER == '3_clients':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_adult_data.load_adult_random()  # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_age3() # replace function if other Dataset wanted
     elif LOADER == '5_clients':
         data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_age5()  # replace function if other Dataset wanted
     elif LOADER == 'random':
@@ -58,10 +58,11 @@ def runFLSimulation():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")
 
-    # Setup Strategies and FL Environment based on ALGORITHM
+
+    #Setup Strategies and FL Environment based on ALGORITHM
     if ALGORITHM == 'FedAvg':
         client_loss = loss_standard
-        server_agg = agg_fedavg
+        server_agg  = agg_fedavg
         server = FedAvgServer((X_test, y_test, s_list), input_dim, device)
         clients = []
         for c_name, c_data in data_dict.items():
@@ -92,14 +93,20 @@ def runFLSimulation():
         raise ValueError(f"Unknown Algorithm: {ALGORITHM}")
 
 
-def runFedAvgSimulationLoop(server, clients, logger, client_loss, server_agg):
-    # Track best round per metric
+def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
+    #Track best round per metric
 
-    best_balanced_acc_value = -1.0
-    best_round_balanced_acc = -1
+    best_blAcc_value = -1.0
+    best_round_blAcc = -1
 
     best_acc_value = -1.0
     best_round_acc = -1
+
+    best_sp_value = float('inf')
+    best_round_sp = -1
+
+    best_eo_value = float('inf')
+    best_round_eo = -1
 
     best_sp_value = float('inf')
     best_round_sp = -1

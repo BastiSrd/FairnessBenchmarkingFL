@@ -33,6 +33,7 @@ class FLLogger:
         #Track best metrics
         self.best_metrics = {
             "Accuracy": {"round": -1, "value": -1},
+            "balanced_Accuracy": {"round": -1, "value": -1},
             "Statistical_Parity": {"round": -1, "value": float('inf')},
             "Equalized_Odds": {"round": -1, "value": float('inf')}
         }
@@ -53,7 +54,7 @@ class FLLogger:
         #Initialize rounds CSV
         with open(self.rounds_path, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["round", "accuracy", "statistical_parity", "equalized_odds"])
+            writer.writerow(["round", "accuracy", "balanced_accuracy", "statistical_parity", "equalized_odds"])
 
         #Initialize clients CSV
         with open(self.clients_path, "w", newline="") as f:
@@ -89,6 +90,7 @@ class FLLogger:
             writer.writerow([
                 round_idx,
                 metrics["Accuracy"],
+                metrics["balanced_Accuracy"],
                 metrics["Statistical_Parity"],
                 metrics["Equalized_Odds"]
             ])
@@ -96,6 +98,8 @@ class FLLogger:
         #Update best metrics
         if metrics["Accuracy"] > self.best_metrics["Accuracy"]["value"]:
             self.best_metrics["Accuracy"] = {"round": round_idx, "value": metrics["Accuracy"]}
+        if metrics["balanced_Accuracy"] > self.best_metrics["balanced_Accuracy"]["value"]:
+            self.best_metrics["balanced_Accuracy"] = {"round": round_idx, "value": metrics["balanced_Accuracy"]}
         if abs(metrics["Statistical_Parity"]) < self.best_metrics["Statistical_Parity"]["value"]:
             self.best_metrics["Statistical_Parity"] = {"round": round_idx, "value": abs(metrics["Statistical_Parity"])}
         if metrics["Equalized_Odds"] < self.best_metrics["Equalized_Odds"]["value"]:
@@ -104,6 +108,7 @@ class FLLogger:
         #Add to .log file
         with open(self.log_file_path, "a") as f:
             f.write(f"Round {round_idx}: Accuracy={metrics['Accuracy']:.4f}, "
+                    f"Balanced Accuracy={metrics['balanced_Accuracy']:.4f}, "
                     f"SP={metrics['Statistical_Parity']:.4f}, "
                     f"EO={metrics['Equalized_Odds']:.4f}\n")
 
