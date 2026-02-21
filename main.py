@@ -12,10 +12,16 @@ from FedAvg.FedAvgServer import FedAvgServer
 from TrustFed.TrustFedClient import TrustFedClient
 from TrustFed.TrustFedLoss import loss_trustfed, agg_trustfed
 from TrustFed.TrustFedServer import TrustFedServer
+from EOFedMinMax.EOFedMinMaxClient import EOFedMinMaxClient
+from EOFedMinMax.lossStrategiesEOFedMinMax import loss_EOfedminmax, agg_EOfedminmax
+from EOFedMinMax.EOFedMinMaxServer import EOFedMinMaxServer
+from OrigFedMinMax.OrigFedMinMaxClient import OrigFedMinMaxClient
+from OrigFedMinMax.OriglossStrategiesFedMinMax import loss_Origfedminmax, agg_Origfedminmax
+from OrigFedMinMax.OrigFedMinMaxServer import OrigFedMinMaxServer
 from logger import FLLogger
 
 # --- Configuration ---
-ALGORITHM = 'TrustFed'  # Options: 'FedAvg', 'FedMinMax', 'TrustFed', 'Fairness' / only FedAvg currently implemented
+ALGORITHM = 'TrustFed'  # Options: 'FedAvg', 'FedMinMax', "EOFedMinMax" ,'TrustFed'
 LOADER = '3_clients'  # Options: '3_clients', '5_clients', 'random'
 
 # --- Trainingskonstanten for Benchmark
@@ -48,9 +54,9 @@ def runFLSimulation():
     if LOADER == '3_clients':
         data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_adult_data.load_adult_age3() # replace function if other Dataset wanted
     elif LOADER == '5_clients':
-        data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_age5()  # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_age5()  # replace function if other Dataset wanted
     elif LOADER == 'random':
-        data_dict, X_test, y_test, s_list, _, _ = DatasetLoader.load_adult_data.load_adult_random()  # replace function if other Dataset wanted
+        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_random()  # replace function if other Dataset wanted
     else:
         raise ValueError(f"Unknown loader: {LOADER}")
 
@@ -96,7 +102,6 @@ def runFLSimulation():
         print(f"Initialized {len(clients)} clients.")
 
         runOrigFedMinMaxSimulationLoop(server,clients,logger,client_loss,server_agg, data_dict)
-        runFedAvgSimulationLoop(server, clients, logger, client_loss, server_agg)
 
 
     elif ALGORITHM == "TrustFed":
