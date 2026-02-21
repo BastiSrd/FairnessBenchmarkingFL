@@ -41,7 +41,7 @@ def build_model_class(input_size):
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CLIENT_EPOCHS = 1
 CLIENT_BATCHSIZE = 32
-CLIENT_STEPSIZE = 0.001
+CLIENT_STEPSIZE = 0.005
 COMMUNICATION_ROUNDS = 50
 NY = 100  # number of points in Y sets for fairness
 LAMBDA = 0.2
