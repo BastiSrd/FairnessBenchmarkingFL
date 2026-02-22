@@ -99,7 +99,7 @@ def runFLSimulation(loaderID, algorithmID, trustfedFairness: Optional[str] = Non
     if algorithmID == 'FedAvg':
         client_loss = loss_standard
         server_agg  = agg_fedavg
-        server = FedAvgServer((X_test, y_test, s_list), input_dim, device)
+        server = FedAvgServer((X_test, y_test, s_list,X_val, y_val, sval_list), input_dim, device)
         clients = []
         for c_name, c_data in data_dict.items():
             clients.append(FedAvgClient(c_name, c_data, input_dim, device))
@@ -488,7 +488,10 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         server.aggregate(client_reports, server_agg)
 
         # Evaluate
-        metrics = server.evaluate()
+        if r == ROUNDS - 1:
+            metrics = server.evaluate(final=True)
+        else:
+            metrics = server.evaluate(final=False)
         logger.log_round(r + 1, metrics)
 
         # Track best round for each metric

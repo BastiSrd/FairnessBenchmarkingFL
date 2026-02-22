@@ -23,6 +23,14 @@ class FedAvgServer:
         else:
             self.s_test = test_data[2].to(self.device).view(-1, 1)
 
+        self.X_val = test_data[3].to(self.device)
+        self.y_val = test_data[4].to(self.device).view(-1, 1)
+        #Convert sensitive attributes to tensor if they are a list
+        if isinstance(test_data[5], list):
+            self.s_val = torch.tensor(test_data[5], dtype=torch.float32).to(self.device).view(-1, 1)
+        else:
+            self.s_val = test_data[5].to(self.device).view(-1, 1)
+
         #Initialize Global Model
         self.global_model = simpleModel(input_dim).to(self.device)
         
@@ -54,22 +62,27 @@ class FedAvgServer:
 
 
 
-    def evaluate(self):
+    def evaluate(self, final=False):
         """
         Runs inference on the global test set and computes metrics.
         Returns: Dict {Accuracy, SP, EO}
         """
         self.global_model.eval()
+        if final:
+            eval_X, eval_y, eval_s = self.X_test, self.y_test, self.s_test
+        else:
+            eval_X, eval_y, eval_s = self.X_val, self.y_val, self.s_val
+
         with torch.no_grad():
-            logits = self.global_model(self.X_test)
+            logits = self.global_model(eval_X)
             preds = (logits > 0.5).float()
             
             # Accuracy
-            acc = accuracy_score(self.y_test.cpu(), preds.cpu())
+            acc = accuracy_score(eval_y.cpu(), preds.cpu())
 
             # Prepare tensors (Ensure they are flat 1D arrays)
-            y_flat = self.y_test.view(-1)
-            s_flat = self.s_test.view(-1)
+            y_flat = eval_y.view(-1)
+            s_flat = eval_s.view(-1)
             preds_flat = preds.view(-1)
 
             # 2. Compute Fairness Metrics using new functions
