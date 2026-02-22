@@ -149,6 +149,9 @@ def runFLSimulation(loaderID, algorithmID, trustfedFairness: Optional[str] = Non
             logger=logger,
             fairness_notion=trustfedFairness,
             p_norm=TRUSTFED_P_NORM,
+            x_val=X_val,
+            y_val=y_val,
+            s_val=sval_list
         )
 
     else:
@@ -464,6 +467,8 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
     best_eo_value = float('inf')
     best_round_eo = -1
 
+    bestWeights = server.broadcast_weights()
+
     # Simulation Loop
     for r in range(ROUNDS):
         print(f"\n--- Round {r + 1} ---")
@@ -488,10 +493,8 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         server.aggregate(client_reports, server_agg)
 
         # Evaluate
-        if r == ROUNDS - 1:
-            metrics = server.evaluate(final=True)
-        else:
-            metrics = server.evaluate(final=False)
+        metrics = server.evaluate(final=False)
+
         logger.log_round(r + 1, metrics)
 
         # Track best round for each metric
@@ -502,6 +505,7 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         if metrics["Accuracy"] > best_acc_value:
             best_acc_value = metrics["Accuracy"]
             best_round_acc = r + 1
+            bestWeights = server.broadcast_weights()
 
         if abs(metrics["Statistical_Parity"]) < best_sp_value:
             best_sp_value = abs(metrics["Statistical_Parity"])
@@ -519,6 +523,34 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
             f"EO={metrics['Equalized_Odds']:.4f}"
         )
     # Save best metrics to CSV and .log
+    server.loadBestModel(bestWeights)
+    metrics = server.evaluate(final= True)
+    logger.log_round(r+2, metrics)
+
+    #Track best round for each metric
+    if metrics["Accuracy"] > best_acc_value:
+        best_acc_value = metrics["Accuracy"]
+        best_round_acc = r+2
+
+    if metrics["balanced_Accuracy"] > best_blAcc_value:
+        best_blAcc_value = metrics["balanced_Accuracy"]
+        best_round_blAcc = r + 2
+
+    if abs(metrics["Statistical_Parity"]) < best_sp_value:
+        best_sp_value = abs(metrics["Statistical_Parity"])
+        best_round_sp = r+2
+
+    if metrics["Equalized_Odds"] < best_eo_value:
+        best_eo_value = metrics["Equalized_Odds"]
+        best_round_eo = r+2
+
+    print(
+            f"Results Round {r+2}: "
+            f"Acc={metrics['Accuracy']:.8f}, "
+            f"Balanced Acc={metrics['balanced_Accuracy']:.8f}, "
+            f"SP={metrics['Statistical_Parity']:.8f}, "
+            f"EO={metrics['Equalized_Odds']:.8f}"
+        )
 
     logger.best_metrics = {
         "Balanced_Accuracy": {"round": best_round_balanced_acc, "value": best_balanced_acc_value},
@@ -543,6 +575,9 @@ def run_trustfed_once(
         X_test,
         y_test,
         s_list,
+        x_val,
+        y_val, 
+        s_val,
         input_dim: int,
         device: str,
         logger: FLLogger,
@@ -575,7 +610,7 @@ def run_trustfed_once(
     """
 
     server = TrustFedServer(
-        (X_test, y_test, s_list),
+        (X_test, y_test, s_list, x_val, y_val, s_val),
         input_dim,
         device,
         fairness_notion=fairness_notion,
@@ -600,6 +635,8 @@ def run_trustfed_once(
 
     last_metrics = None
 
+    bestWeights = server.broadcast_weights()
+
     for r in range(rounds):
         print(f"\n--- Round {r + 1} ---")
         global_weights = server.broadcast_weights()
@@ -623,7 +660,6 @@ def run_trustfed_once(
         logger.log_clients(r + 1, client_reports)
         server.aggregate(client_reports, agg_trustfed)
 
-        metrics = server.evaluate()
         last_metrics = metrics
         logger.log_round(r + 1, metrics)
 
@@ -634,6 +670,7 @@ def run_trustfed_once(
         if metrics["Accuracy"] > best_acc_value:
             best_acc_value = metrics["Accuracy"]
             best_round_acc = r + 1
+            bestWeights = server.broadcast_weights()
 
         if abs(metrics["Statistical_Parity"]) < best_sp_value:
             best_sp_value = abs(metrics["Statistical_Parity"])
@@ -651,6 +688,26 @@ def run_trustfed_once(
             f"EO={metrics['Equalized_Odds']:.10f}"
         )
 
+    server.loadBestModel(bestWeights)
+    metrics = server.evaluate(final= True)
+    logger.log_round(r+2, metrics)
+
+    if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+            best_balanced_acc_value = metrics["balanced_Accuracy"]
+            best_round_balanced_acc = r + 2
+
+    if metrics["Accuracy"] > best_acc_value:
+        best_acc_value = metrics["Accuracy"]
+        best_round_acc = r + 2
+        bestWeights = server.broadcast_weights()
+
+    if abs(metrics["Statistical_Parity"]) < best_sp_value:
+        best_sp_value = abs(metrics["Statistical_Parity"])
+        best_round_sp = r + 2
+
+    if metrics["Equalized_Odds"] < best_eo_value:
+        best_eo_value = metrics["Equalized_Odds"]
+        best_round_eo = r + 2
     logger.best_metrics = {
         "Balanced_Accuracy": {"round": best_round_balanced_acc, "value": best_balanced_acc_value},
         "Accuracy": {"round": best_round_acc, "value": best_acc_value},

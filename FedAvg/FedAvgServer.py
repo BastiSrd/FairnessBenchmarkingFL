@@ -40,6 +40,10 @@ class FedAvgServer:
 
         self.device = device
 
+    def loadBestModel(self, best_state_dict):
+        "Loads the best model found during training (e.g., for final evaluation)."
+        self.global_model.load_state_dict(best_state_dict)
+
     def broadcast_weights(self):
         """Returns the global model weights (on CPU) to be sent to clients."""
         return {k: v.cpu() for k, v in self.global_model.state_dict().items()}
