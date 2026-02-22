@@ -660,6 +660,7 @@ def run_trustfed_once(
         logger.log_clients(r + 1, client_reports)
         server.aggregate(client_reports, agg_trustfed)
 
+        metrics = server.evaluate(final=False)
         last_metrics = metrics
         logger.log_round(r + 1, metrics)
 
