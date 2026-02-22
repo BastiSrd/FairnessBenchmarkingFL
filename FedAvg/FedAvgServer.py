@@ -5,7 +5,7 @@ from models import simpleModel #reuse the model definition
 from fairnessMetrics import compute_equalized_odds, compute_statistical_parity, compute_balanced_accuracy
 
 class FedAvgServer:
-    def __init__(self, test_data, input_dim, device='cpu'):
+    def __init__(self, test_data, input_dim, device='cuda'):
         """
         Args:
             test_data (tuple): (X_test, y_test, s_test)

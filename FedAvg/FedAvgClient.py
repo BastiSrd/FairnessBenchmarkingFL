@@ -27,7 +27,7 @@ class FedAvgClient:
         
         #Create a DataLoader for batching (Standard SGD)
         dataset = TensorDataset(self.X, self.y, self.s)
-        self.loader = DataLoader(dataset, batch_size=32, shuffle=True)
+        self.loader = DataLoader(dataset, batch_size=128, shuffle=True)
         
         #Initialize Model
         self.model = simpleModel(input_dim).to(device)

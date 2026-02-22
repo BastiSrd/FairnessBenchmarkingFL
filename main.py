@@ -709,6 +709,15 @@ def run_trustfed_once(
     if metrics["Equalized_Odds"] < best_eo_value:
         best_eo_value = metrics["Equalized_Odds"]
         best_round_eo = r + 2
+
+    print(
+        f"Results Round {r + 2}: "
+        f"Balanced_Acc={metrics['balanced_Accuracy']:.4f}, "
+        f"Acc={metrics['Accuracy']:.4f}, "
+        f"SP={metrics['Statistical_Parity']:.10f}, "
+        f"EO={metrics['Equalized_Odds']:.10f}"
+    )
+
     logger.best_metrics = {
         "Balanced_Accuracy": {"round": best_round_balanced_acc, "value": best_balanced_acc_value},
         "Accuracy": {"round": best_round_acc, "value": best_acc_value},
