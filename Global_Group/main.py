@@ -18,6 +18,7 @@ from fairnessMetrics import compute_statistical_parity, compute_equalized_odds, 
 from torch.nn import BCELoss
 from logger import FLLogger
 import argparse
+import copy
 
 
 # -----------------------------
@@ -159,6 +160,19 @@ def print_log_progress():
     if not hasattr(print_log_progress, "current_round"):
         print_log_progress.current_round = 1
 
+        print_log_progress.best_val_acc = -1.0
+        print_log_progress.best_round_acc = -1
+        print_log_progress.best_weights = None     
+        
+        print_log_progress.best_bal_acc = -1.0
+        print_log_progress.best_round_bal_acc = -1
+        
+        print_log_progress.best_sp = float('inf')
+        print_log_progress.best_round_sp = -1
+        
+        print_log_progress.best_eodd = float('inf')
+        print_log_progress.best_round_eodd = -1
+
     server.model.eval() 
     with torch.no_grad():
         all_probs = server.model(X_val).flatten()
@@ -181,6 +195,27 @@ def print_log_progress():
     
     # Equalized Odds
     eodd_val = compute_equalized_odds(all_preds, all_labels, all_sensitive)
+
+
+    # Check high scores for everything ---
+    if acc > print_log_progress.best_val_acc:
+        print_log_progress.best_val_acc = acc
+        print_log_progress.best_round_acc = print_log_progress.current_round
+                # Deepcopy saves an exact, independent clone of the weights
+        print_log_progress.best_weights = copy.deepcopy(server.model.state_dict())
+        
+    if bal_acc > print_log_progress.best_bal_acc:
+        print_log_progress.best_bal_acc = bal_acc
+        print_log_progress.best_round_bal_acc = print_log_progress.current_round
+        
+    if abs(sp) < print_log_progress.best_sp:
+        print_log_progress.best_sp = abs(sp)
+        print_log_progress.best_round_sp = print_log_progress.current_round
+        
+    if eodd_val < print_log_progress.best_eodd:
+        print_log_progress.best_eodd = eodd_val
+        print_log_progress.best_round_eodd = print_log_progress.current_round
+    # ----------------------------------------------------------------------
     
     print(f"Round {print_log_progress.current_round}: Acc={acc:.4f}, BalAcc={bal_acc:.4f}, SP={sp:.4f}, Eodd={eodd_val:.4f}")
 
@@ -227,13 +262,14 @@ server.sync_N()
 # Run the Federated Training Loop
 server.train()
 
-# Finaize the logger
-fl_logger.finalize()
-
 # -----------------------------
 # 8. Evaluate Global Model
 # -----------------------------
 print("\n--- Final Global Evaluation ---")
+
+if print_log_progress.best_weights is not None:
+    server.model.load_state_dict(print_log_progress.best_weights)
+
 server.model.eval()
 with torch.no_grad():
     all_probs = server.model(X_test).flatten()
@@ -246,9 +282,33 @@ all_preds = (all_probs > 0.5).float()
 final_acc = accuracy_score(all_labels.cpu(), all_preds.cpu())
 final_bal = compute_balanced_accuracy(all_preds, all_labels)
 final_sp = compute_statistical_parity(all_preds, all_sensitive)
-final_eo = compute_equalized_odds(all_preds, all_labels, all_sensitive)
+final_eodd = compute_equalized_odds(all_preds, all_labels, all_sensitive)
 
 print(f"Global Model Accuracy: {final_acc:.4f}")
 print(f"Global Model Balanced Accuracy: {final_bal:.4f}")
 print(f"Global Model Statistical Parity (SP): {final_sp:.4f}")
-print(f"Global Model Equalized Odds (Eodd): {final_eo:.4f}")
+print(f"Global Model Equalized Odds (Eodd): {final_eodd:.4f}")
+
+fl_logger.best_metrics = {
+    "Accuracy": {"round": print_log_progress.best_round_acc, "value": print_log_progress.best_val_acc},
+    "balanced_Accuracy": {"round": print_log_progress.best_round_bal_acc, "value": print_log_progress.best_bal_acc},
+    "Statistical_Parity": {"round": print_log_progress.best_round_sp, "value": print_log_progress.best_sp},
+    "Equalized_Odds": {"round": print_log_progress.best_round_eodd, "value": print_log_progress.best_eodd}
+}
+
+fl_logger.log_round(
+    round_idx="FINAL_TEST",
+    metrics={
+        "Accuracy": final_acc,
+        "balanced_Accuracy": final_bal,
+        "Statistical_Parity": final_sp,
+        "Equalized_Odds": final_eodd
+    }
+)
+
+# Finaize the logger
+fl_logger.finalize()
+
+print("\nBest Rounds Summary:")
+for metric, info in fl_logger.best_metrics.items():
+    print(f"{metric}: Round {info['round']} | Value: {info['value']:.4f}")
