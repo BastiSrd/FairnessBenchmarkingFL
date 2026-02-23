@@ -198,6 +198,7 @@ def print_log_progress():
     if acc > print_log_progress.best_val_acc:
         print_log_progress.best_val_acc = acc
         print_log_progress.best_round_acc = print_log_progress.current_round
+        # Deepcopy saves an exact, independent clone of the weights
         print_log_progress.best_weights = copy.deepcopy(server.model.state_dict())
         
     if bal_acc > print_log_progress.best_bal_acc:
@@ -211,7 +212,6 @@ def print_log_progress():
     if eodd_val < print_log_progress.best_eodd:
         print_log_progress.best_eodd = eodd_val
         print_log_progress.best_round_eodd = print_log_progress.current_round
-    # ----------------------------------------------------------------------
     
     print(f"Round {print_log_progress.current_round}: Acc={acc:.4f}, BalAcc={bal_acc:.4f}, SP={sp:.4f}, Eodd={eodd_val:.4f}")
 
@@ -292,7 +292,7 @@ fl_logger.best_metrics = {
 }
 
 fl_logger.log_round(
-    round_idx="FINAL_TEST",
+    round_idx="51",
     metrics={
         "Accuracy": final_acc,
         "balanced_Accuracy": final_bal,

@@ -201,7 +201,7 @@ def print_log_progress():
     if acc > print_log_progress.best_val_acc:
         print_log_progress.best_val_acc = acc
         print_log_progress.best_round_acc = print_log_progress.current_round
-                # Deepcopy saves an exact, independent clone of the weights
+        # Deepcopy saves an exact, independent clone of the weights
         print_log_progress.best_weights = copy.deepcopy(server.model.state_dict())
         
     if bal_acc > print_log_progress.best_bal_acc:
@@ -215,7 +215,7 @@ def print_log_progress():
     if eodd_val < print_log_progress.best_eodd:
         print_log_progress.best_eodd = eodd_val
         print_log_progress.best_round_eodd = print_log_progress.current_round
-    # ----------------------------------------------------------------------
+
     
     print(f"Round {print_log_progress.current_round}: Acc={acc:.4f}, BalAcc={bal_acc:.4f}, SP={sp:.4f}, Eodd={eodd_val:.4f}")
 
@@ -278,7 +278,6 @@ all_labels = y_test.flatten()
 all_sensitive = s_test.flatten()
 all_preds = (all_probs > 0.5).float() 
 
-# Use your colleague's exact functions
 final_acc = accuracy_score(all_labels.cpu(), all_preds.cpu())
 final_bal = compute_balanced_accuracy(all_preds, all_labels)
 final_sp = compute_statistical_parity(all_preds, all_sensitive)
@@ -297,7 +296,7 @@ fl_logger.best_metrics = {
 }
 
 fl_logger.log_round(
-    round_idx="FINAL_TEST",
+    round_idx="51",
     metrics={
         "Accuracy": final_acc,
         "balanced_Accuracy": final_bal,
