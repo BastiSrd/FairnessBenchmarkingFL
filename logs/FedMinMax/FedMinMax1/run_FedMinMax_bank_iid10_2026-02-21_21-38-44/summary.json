@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "FedMinMax",
+        "loader": "bank_iid10",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-21_21-38-44",
+        "endTime": "2026-02-21_21-39-03"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 13,
+            "value": 0.8758333333333334
+        },
+        "balanced_Accuracy": {
+            "round": 50,
+            "value": 0.5826522593690463
+        },
+        "Statistical_Parity": {
+            "round": 21,
+            "value": 0.0018492694944143295
+        },
+        "Equalized_Odds": {
+            "round": 21,
+            "value": 0.001198264304548502
+        }
+    }
+}

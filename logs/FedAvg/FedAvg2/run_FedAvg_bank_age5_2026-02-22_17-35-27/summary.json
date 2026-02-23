@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "FedAvg",
+        "loader": "bank_age5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-22_17-35-27",
+        "endTime": "2026-02-22_17-36-03"
+    },
+    "best_metrics": {
+        "Balanced_Accuracy": {
+            "round": 28,
+            "value": 0.689211640352512
+        },
+        "Accuracy": {
+            "round": 51,
+            "value": 0.9048808928868899
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.0007999353110790253
+        },
+        "Equalized_Odds": {
+            "round": 1,
+            "value": 0.0033844804856926203
+        }
+    }
+}

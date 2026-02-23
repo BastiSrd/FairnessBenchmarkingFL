@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "FedAvg",
+        "loader": "cac_iid10",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-22_19-18-50",
+        "endTime": "2026-02-22_19-18-53"
+    },
+    "best_metrics": {
+        "Balanced_Accuracy": {
+            "round": 14,
+            "value": 0.7772785622593068
+        },
+        "Accuracy": {
+            "round": 14,
+            "value": 0.85
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.20930232107639313
+        },
+        "Equalized_Odds": {
+            "round": 38,
+            "value": 0.16508839279413223
+        }
+    }
+}

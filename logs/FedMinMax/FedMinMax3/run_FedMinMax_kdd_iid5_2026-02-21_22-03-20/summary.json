@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "FedMinMax",
+        "loader": "kdd_iid5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-21_22-03-20",
+        "endTime": "2026-02-21_22-05-47"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 1,
+            "value": 0.92776478449716
+        },
+        "balanced_Accuracy": {
+            "round": 49,
+            "value": 0.5858033464875634
+        },
+        "Statistical_Parity": {
+            "round": 5,
+            "value": 0.00045418739318847656
+        },
+        "Equalized_Odds": {
+            "round": 11,
+            "value": 0.00111311674118042
+        }
+    }
+}

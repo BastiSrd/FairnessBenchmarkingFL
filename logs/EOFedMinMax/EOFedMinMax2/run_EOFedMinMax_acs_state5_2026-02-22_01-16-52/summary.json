@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "EOFedMinMax",
+        "loader": "acs_state5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-22_01-16-52",
+        "endTime": "2026-02-22_01-32-03"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 49,
+            "value": 0.639649798239326
+        },
+        "balanced_Accuracy": {
+            "round": 49,
+            "value": 0.6544787836693845
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 8.404254913330078e-06
+        },
+        "Equalized_Odds": {
+            "round": 2,
+            "value": 5.930662155151367e-06
+        }
+    }
+}

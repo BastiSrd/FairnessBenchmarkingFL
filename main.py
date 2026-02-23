@@ -532,9 +532,9 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         best_acc_value = metrics["Accuracy"]
         best_round_acc = r+2
 
-    if metrics["balanced_Accuracy"] > best_blAcc_value:
-        best_blAcc_value = metrics["balanced_Accuracy"]
-        best_round_blAcc = r + 2
+    if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+        best_balanced_acc_value = metrics["balanced_Accuracy"]
+        best_round_balanced_acc = r + 2
 
     if abs(metrics["Statistical_Parity"]) < best_sp_value:
         best_sp_value = abs(metrics["Statistical_Parity"])

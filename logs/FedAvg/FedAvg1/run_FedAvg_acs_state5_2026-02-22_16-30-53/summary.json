@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "FedAvg",
+        "loader": "acs_state5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-22_16-30-53",
+        "endTime": "2026-02-22_16-52-27"
+    },
+    "best_metrics": {
+        "Balanced_Accuracy": {
+            "round": 31,
+            "value": 0.7753874803394989
+        },
+        "Accuracy": {
+            "round": 51,
+            "value": 0.7903164100726088
+        },
+        "Statistical_Parity": {
+            "round": 33,
+            "value": 0.1852535903453827
+        },
+        "Equalized_Odds": {
+            "round": 18,
+            "value": 0.11453334242105484
+        }
+    }
+}

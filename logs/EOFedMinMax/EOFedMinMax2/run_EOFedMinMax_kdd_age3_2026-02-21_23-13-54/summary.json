@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "EOFedMinMax",
+        "loader": "kdd_age3",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-21_23-13-54",
+        "endTime": "2026-02-21_23-16-23"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 1,
+            "value": 0.9362915441504054
+        },
+        "balanced_Accuracy": {
+            "round": 36,
+            "value": 0.6690677698427359
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 1.1082389391958714e-05
+        },
+        "Equalized_Odds": {
+            "round": 2,
+            "value": 1.157930091721937e-05
+        }
+    }
+}
