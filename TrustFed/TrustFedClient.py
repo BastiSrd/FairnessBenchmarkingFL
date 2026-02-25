@@ -40,7 +40,7 @@ class TrustFedClient:
         self.s = data_dict["s"].to(device).view(-1, 1)
 
         dataset = TensorDataset(self.X, self.y, self.s)
-        self.loader = DataLoader(dataset, batch_size=32, shuffle=True)
+        self.loader = DataLoader(dataset, batch_size=128, shuffle=True)
 
         self.model = simpleModel(input_dim).to(device)
 

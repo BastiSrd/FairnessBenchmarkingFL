@@ -532,9 +532,9 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         best_acc_value = metrics["Accuracy"]
         best_round_acc = r+2
 
-    if metrics["balanced_Accuracy"] > best_blAcc_value:
-        best_blAcc_value = metrics["balanced_Accuracy"]
-        best_round_blAcc = r + 2
+    if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+        best_balanced_acc_value = metrics["balanced_Accuracy"]
+        best_round_balanced_acc = r + 2
 
     if abs(metrics["Statistical_Parity"]) < best_sp_value:
         best_sp_value = abs(metrics["Statistical_Parity"])
@@ -709,6 +709,15 @@ def run_trustfed_once(
     if metrics["Equalized_Odds"] < best_eo_value:
         best_eo_value = metrics["Equalized_Odds"]
         best_round_eo = r + 2
+
+    print(
+        f"Results Round {r + 2}: "
+        f"Balanced_Acc={metrics['balanced_Accuracy']:.4f}, "
+        f"Acc={metrics['Accuracy']:.4f}, "
+        f"SP={metrics['Statistical_Parity']:.10f}, "
+        f"EO={metrics['Equalized_Odds']:.10f}"
+    )
+
     logger.best_metrics = {
         "Balanced_Accuracy": {"round": best_round_balanced_acc, "value": best_balanced_acc_value},
         "Accuracy": {"round": best_round_acc, "value": best_acc_value},
