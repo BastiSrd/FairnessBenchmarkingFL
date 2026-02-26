@@ -1,0 +1,32 @@
+{
+    "config": {
+        "algorithm": "Global_Group_Fairness_SP",
+        "loader": "bank_iid10",
+        "CLIENT_EPOCHS": 1,
+        "CLIENT_BATCHSIZE": 32,
+        "CLIENT_STEPSIZE": 0.005,
+        "COMMUNICATION_ROUNDS": 50,
+        "LAMBDA": 0.2,
+        "NY": 100,
+        "timestamp": "2026-02-24_03-10-52",
+        "endTime": "2026-02-24_03-13-59"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": "51",
+            "value": 0.8894070619586942
+        },
+        "balanced_Accuracy": {
+            "round": 49,
+            "value": 0.5753029490235645
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.0
+        },
+        "Equalized_Odds": {
+            "round": 1,
+            "value": 0.0
+        }
+    }
+}
