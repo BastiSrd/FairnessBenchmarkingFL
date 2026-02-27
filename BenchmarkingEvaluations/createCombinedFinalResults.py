@@ -18,8 +18,8 @@ def parse_run_name(run_dir_name: str):
     parts = run_dir_name.split("_")
     if len(parts) < 4:
         return None, None
-    dataset = parts[5]
-    split = parts[6]
+    dataset = parts[3]
+    split = parts[4]
     return dataset, split
 
 
@@ -81,4 +81,4 @@ def main(Algorithm: str):
 
 
 if __name__ == "__main__":
-    main("GlobalGroupEodd")
+    main("TrustFedSP")
