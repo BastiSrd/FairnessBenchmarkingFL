@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "TrustFed_SP",
+        "loader": "kdd_age5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-23_19-12-58",
+        "endTime": "2026-02-23_19-19-20"
+    },
+    "best_metrics": {
+        "Balanced_Accuracy": {
+            "round": 20,
+            "value": 0.7713479866524817
+        },
+        "Accuracy": {
+            "round": 32,
+            "value": 0.9427960438385459
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.0
+        },
+        "Equalized_Odds": {
+            "round": 1,
+            "value": 0.0
+        }
+    }
+}
