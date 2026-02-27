@@ -1,0 +1,8 @@
+# Core Machine Learning, Math, Logging, Data loading & Progress
+torch
+numpy
+scikit-learn
+wandb
+tqdm
+folktables
+pandas
