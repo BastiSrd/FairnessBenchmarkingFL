@@ -18,8 +18,9 @@ def parse_run_name(run_dir_name: str):
     parts = run_dir_name.split("_")
     if len(parts) < 4:
         return None, None
-    dataset = parts[3]
-    split = parts[4]
+    #adjust these indices if your naming convention differs
+    dataset = parts[5]
+    split = parts[6]
     return dataset, split
 
 
@@ -29,12 +30,14 @@ def extract_round_metrics(rounds_csv: Path, round_number: str):
         for row in reader:
             if str(row.get("round", "")).strip() == str(round_number):
                 return {m: row.get(m, "") for m in METRICS}
+    print("returned None for metrics from", rounds_csv)
     return None
 
 
 def main(Algorithm: str):
     base = Path(__file__).parent.parent#
     logs_dir = base / "logs" / Algorithm
+    print(logs_dir)
     run_roots = [logs_dir / f"{Algorithm}1", logs_dir / f"{Algorithm}2", logs_dir / f"{Algorithm}3"]
 
     # Collect data keyed by dataset_split
@@ -81,4 +84,4 @@ def main(Algorithm: str):
 
 
 if __name__ == "__main__":
-    main("TrustFedSP")
+    main("GlobalGroupEodd")

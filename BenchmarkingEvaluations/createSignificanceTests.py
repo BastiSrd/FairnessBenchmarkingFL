@@ -3,7 +3,7 @@ from scipy.stats import ttest_rel
 import numpy as np
 
 ALGORITHM1 = "FedAvg"
-ALGORITHM2 = "TrustFedEO"
+ALGORITHM2 = "GlobalGroup"
 
 # Load the data
 df_1 = pd.read_csv(f'./logs/{ALGORITHM1}/combinedFinalResults{ALGORITHM1}.csv')
@@ -18,7 +18,7 @@ for index, row_Alg1 in df_1.iterrows():
     # Match the row
     row_Alg2 = df_2[df_2['dataset_split'] == split_name].iloc[0]
     
-    p_values = {'dataset_split': split_name}
+    ttestValues = {'dataset_split': split_name}
     
     for metric in metrics:
         a = [row_Alg2[f'{metric}1'], row_Alg2[f'{metric}2'], row_Alg2[f'{metric}3']]
@@ -26,13 +26,16 @@ for index, row_Alg1 in df_1.iterrows():
         
         try:
             # Paired T-test on the 3 seeds
-            t_stat, p = ttest_rel(a, b)
+            t, p = ttest_rel(a, b)
         except Exception:
             p = np.nan
+            t = np.nan
         
-        p_values[f'p_{metric}'] = p
+        ttestValues[f'p_{metric}'] = p
+        ttestValues[f't_{metric}'] = t
+
+    results_ttest.append(ttestValues)
     
-    results_ttest.append(p_values)
 
 ttest_df = pd.DataFrame(results_ttest)
 
