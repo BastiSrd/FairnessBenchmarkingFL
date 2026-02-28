@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "FedMinMax",
+        "loader": "adult_age5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-21_21-38-10",
+        "endTime": "2026-02-21_21-38-26"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 1,
+            "value": 0.7563472563472563
+        },
+        "balanced_Accuracy": {
+            "round": 50,
+            "value": 0.6128452013982428
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.0021928403875790536
+        },
+        "Equalized_Odds": {
+            "round": 1,
+            "value": 0.0015626127715222538
+        }
+    }
+}

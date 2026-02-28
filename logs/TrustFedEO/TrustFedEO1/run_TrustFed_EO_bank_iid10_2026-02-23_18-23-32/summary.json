@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "TrustFed_EO",
+        "loader": "bank_iid10",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-23_18-23-32",
+        "endTime": "2026-02-23_18-24-43"
+    },
+    "best_metrics": {
+        "Balanced_Accuracy": {
+            "round": 50,
+            "value": 0.7289567152436314
+        },
+        "Accuracy": {
+            "round": 51,
+            "value": 0.8904063957361759
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 0.0003133714199066162
+        },
+        "Equalized_Odds": {
+            "round": 1,
+            "value": 0.0010804677149280906
+        }
+    }
+}

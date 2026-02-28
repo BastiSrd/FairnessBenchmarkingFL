@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "TrustFed_SP",
+        "loader": "bank_age5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-23_11-27-07",
+        "endTime": "2026-02-23_11-27-58"
+    },
+    "best_metrics": {
+        "Balanced_Accuracy": {
+            "round": 30,
+            "value": 0.7589033254346496
+        },
+        "Accuracy": {
+            "round": 51,
+            "value": 0.8975512243878061
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.00023583881556987762
+        },
+        "Equalized_Odds": {
+            "round": 26,
+            "value": 0.0021695513278245926
+        }
+    }
+}

@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "EOFedMinMax",
+        "loader": "cac_state3",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-25_19-21-10",
+        "endTime": "2026-02-25_19-21-13"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 23,
+            "value": 0.8053691275167785
+        },
+        "balanced_Accuracy": {
+            "round": 23,
+            "value": 0.8077825929938606
+        },
+        "Statistical_Parity": {
+            "round": 6,
+            "value": 0.014535918831825256
+        },
+        "Equalized_Odds": {
+            "round": 32,
+            "value": 0.01912579918280244
+        }
+    }
+}

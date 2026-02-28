@@ -1,0 +1,32 @@
+{
+    "config": {
+        "algorithm": "Global_Group_Fairness_Eodd",
+        "loader": "bank_age5",
+        "CLIENT_EPOCHS": 1,
+        "CLIENT_BATCHSIZE": 32,
+        "CLIENT_STEPSIZE": 0.005,
+        "COMMUNICATION_ROUNDS": 50,
+        "LAMBDA": 0.2,
+        "NY": 100,
+        "timestamp": "2026-02-24_03-58-26",
+        "endTime": "2026-02-24_04-01-24"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 46,
+            "value": 0.8926666666666667
+        },
+        "balanced_Accuracy": {
+            "round": 48,
+            "value": 0.6381146995393914
+        },
+        "Statistical_Parity": {
+            "round": 1,
+            "value": 0.0
+        },
+        "Equalized_Odds": {
+            "round": 1,
+            "value": 0.0
+        }
+    }
+}

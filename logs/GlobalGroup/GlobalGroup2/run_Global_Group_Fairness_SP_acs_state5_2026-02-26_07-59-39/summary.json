@@ -1,0 +1,32 @@
+{
+    "config": {
+        "algorithm": "Global_Group_Fairness_SP",
+        "loader": "acs_state5",
+        "CLIENT_EPOCHS": 1,
+        "CLIENT_BATCHSIZE": 32,
+        "CLIENT_STEPSIZE": 0.005,
+        "COMMUNICATION_ROUNDS": 50,
+        "LAMBDA": 0.2,
+        "NY": 100,
+        "timestamp": "2026-02-26_07-59-39",
+        "endTime": "2026-02-26_10-01-45"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": "51",
+            "value": 0.7875256224906068
+        },
+        "balanced_Accuracy": {
+            "round": 27,
+            "value": 0.7733104474194614
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 0.1426171064376831
+        },
+        "Equalized_Odds": {
+            "round": 13,
+            "value": 0.06871982663869858
+        }
+    }
+}
