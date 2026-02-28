@@ -1,0 +1,32 @@
+{
+    "config": {
+        "algorithm": "Global_Group_Fairness_Eodd",
+        "loader": "cac_iid5",
+        "CLIENT_EPOCHS": 1,
+        "CLIENT_BATCHSIZE": 32,
+        "CLIENT_STEPSIZE": 0.005,
+        "COMMUNICATION_ROUNDS": 50,
+        "LAMBDA": 0.2,
+        "NY": 100,
+        "timestamp": "2026-02-26_16-16-56",
+        "endTime": "2026-02-26_16-17-06"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": 39,
+            "value": 0.8033333333333333
+        },
+        "balanced_Accuracy": {
+            "round": 39,
+            "value": 0.8025707169542786
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 0.036726683378219604
+        },
+        "Equalized_Odds": {
+            "round": 4,
+            "value": 0.005743980407714844
+        }
+    }
+}

@@ -1,0 +1,32 @@
+{
+    "config": {
+        "algorithm": "Global_Group_Fairness_Eodd",
+        "loader": "adult_age5",
+        "CLIENT_EPOCHS": 1,
+        "CLIENT_BATCHSIZE": 32,
+        "CLIENT_STEPSIZE": 0.005,
+        "COMMUNICATION_ROUNDS": 50,
+        "LAMBDA": 0.2,
+        "NY": 100,
+        "timestamp": "2026-02-24_02-43-00",
+        "endTime": "2026-02-24_02-45-18"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": "51",
+            "value": 0.8129349160867786
+        },
+        "balanced_Accuracy": {
+            "round": 42,
+            "value": 0.7233266331931407
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 0.008732156711630523
+        },
+        "Equalized_Odds": {
+            "round": 2,
+            "value": 0.010339764587115496
+        }
+    }
+}

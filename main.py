@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 
 import DatasetLoader.load_acs_data
@@ -5,7 +6,6 @@ import DatasetLoader.load_adult_data
 import DatasetLoader.load_bank_data
 import DatasetLoader.load_cac_data
 import DatasetLoader.load_kdd_data
-from DatasetLoader import load_adult_data
 from FedAvg.FedAvgClient import FedAvgClient
 from FedAvg.FedAvgLossStrategies import loss_standard, agg_fedavg
 from FedAvg.FedAvgServer import FedAvgServer
@@ -21,62 +21,92 @@ from OrigFedMinMax.OrigFedMinMaxServer import OrigFedMinMaxServer
 from logger import FLLogger
 
 # --- Configuration ---
-ALGORITHM = 'TrustFed'  # Options: 'FedAvg', 'FedMinMax', "EOFedMinMax" ,'TrustFed'
-LOADER = '3_clients'  # Options: '3_clients', '5_clients', 'random'
+#ALGORITHM = 'TrustFed'  # Options: 'FedAvg', 'FedMinMax', "EOFedMinMax" ,'TrustFed'
+#LOADER = '3_clients'  # Options: '3_clients', '5_clients', 'random'
 
 # --- Trainingskonstanten for Benchmark
 ROUNDS = 50
 CLIENT_EPOCHS = 1
 LR = 0.005
 
-TRUSTFED_FAIRNESS = "SP"  # "SP" or "EO"
+
 # defaults mentioned in paper
 TRUSTFED_ALPHA = 1.0
 TRUSTFED_P_NORM = 2
 
 
-def runFLSimulation():
-    print(f"--- Starting FL Simulation: {ALGORITHM} on {LOADER} ---")
+def runFLSimulation(loaderID, algorithmID, trustfedFairness: Optional[str] = None):
+    loader_map = {
+    # Adult
+        "adult_iid5": lambda: DatasetLoader.load_adult_data.load_adult_random(num_clients=5),
+        "adult_iid10": lambda: DatasetLoader.load_adult_data.load_adult_random(num_clients=10),
+        "adult_age3": DatasetLoader.load_adult_data.load_adult_age3,
+        "adult_age5": DatasetLoader.load_adult_data.load_adult_age5,
+        # Bank
+        "bank_iid5": lambda: DatasetLoader.load_bank_data.load_bank_random(num_clients=5),
+        "bank_iid10": lambda: DatasetLoader.load_bank_data.load_bank_random(num_clients=10),
+        "bank_age3": DatasetLoader.load_bank_data.load_bank_age3,
+        "bank_age5": DatasetLoader.load_bank_data.load_bank_age_5, 
+        # KDD
+        "kdd_iid5": lambda: DatasetLoader.load_kdd_data.load_kdd_random(num_clients=5),
+        "kdd_iid10": lambda: DatasetLoader.load_kdd_data.load_kdd_random(num_clients=10),
+        "kdd_age3": DatasetLoader.load_kdd_data.load_kdd_age3,
+        "kdd_age5": DatasetLoader.load_kdd_data.load_kdd_age5,
+        # ACS
+        "acs_iid5": lambda: DatasetLoader.load_acs_data.load_acs_random(num_clients=5),
+        "acs_iid10": lambda: DatasetLoader.load_acs_data.load_acs_random(num_clients=10),
+        "acs_state3": DatasetLoader.load_acs_data.load_acs_states_3,
+        "acs_state5": DatasetLoader.load_acs_data.load_acs_states_5,
+        # CAC
+        "cac_iid5": lambda: DatasetLoader.load_cac_data.load_cac_random(num_clients=5),
+        "cac_iid10": lambda: DatasetLoader.load_cac_data.load_cac_random(num_clients=10),
+        "cac_state3": DatasetLoader.load_cac_data.load_cac_states_3,
+        "cac_state5": DatasetLoader.load_cac_data.load_cac_states_5,
+    }
+
+
+    print(f"--- Starting FL Simulation: {algorithmID} on {loaderID} ---")
 
    #Initialize Logger
-    logger = FLLogger(
-        algorithm=ALGORITHM,
-        loader=LOADER,
-        config={
-            "rounds": ROUNDS,
-            "client_epochs": CLIENT_EPOCHS,
-            "learning_rate": LR
-        }
-    )
-    
-    #Load Data
-    print("Loading data...")
-    if LOADER == '3_clients':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = load_adult_data.load_adult_age3() # replace function if other Dataset wanted
-    elif LOADER == '5_clients':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_age5()  # replace function if other Dataset wanted
-    elif LOADER == 'random':
-        data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = DatasetLoader.load_adult_data.load_adult_random()  # replace function if other Dataset wanted
+    if algorithmID == "TrustFed":
+        logger = FLLogger(
+            algorithm=algorithmID+"_"+trustfedFairness,
+            loader=loaderID,
+            config={
+                "rounds": ROUNDS,
+                "client_epochs": CLIENT_EPOCHS,
+                "learning_rate": LR,
+            }
+        )
     else:
-        raise ValueError(f"Unknown loader: {LOADER}")
-
+        logger = FLLogger(
+            algorithm=algorithmID,
+            loader=loaderID,
+            config={
+                "rounds": ROUNDS,
+                "client_epochs": CLIENT_EPOCHS,
+                "learning_rate": LR
+            }
+        )
+    
+    data_dict, X_test, y_test, s_list, cols, ypot, X_val, y_val, sval_list, yvalpot = loader_map[loaderID]()
     input_dim = X_test.shape[1]
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")
 
 
     #Setup Strategies and FL Environment based on ALGORITHM
-    if ALGORITHM == 'FedAvg':
+    if algorithmID == 'FedAvg':
         client_loss = loss_standard
         server_agg  = agg_fedavg
-        server = FedAvgServer((X_test, y_test, s_list), input_dim, device)
+        server = FedAvgServer((X_test, y_test, s_list,X_val, y_val, sval_list), input_dim, device)
         clients = []
         for c_name, c_data in data_dict.items():
             clients.append(FedAvgClient(c_name, c_data, input_dim, device))
         print(f"Initialized {len(clients)} clients.")
 
         runFedAvgSimulationLoop(server,clients,logger,client_loss,server_agg)
-    elif ALGORITHM == "EOFedMinMax":
+    elif algorithmID == "EOFedMinMax":
         client_loss = loss_EOfedminmax
         server_agg = agg_EOfedminmax
         server = EOFedMinMaxServer((X_test, y_test, s_list, X_val, y_val, sval_list), input_dim, device)
@@ -86,7 +116,7 @@ def runFLSimulation():
         print(f"Initialized {len(clients)} clients.")
 
         runEOFedMinMaxSimulationLoop(server,clients,logger,client_loss,server_agg, data_dict)
-    elif ALGORITHM == "FedMinMax":
+    elif algorithmID == "FedMinMax":
         client_loss = loss_Origfedminmax
         server_agg = agg_Origfedminmax
         s_test_tensor = torch.tensor(s_list).long()
@@ -104,7 +134,7 @@ def runFLSimulation():
         runOrigFedMinMaxSimulationLoop(server,clients,logger,client_loss,server_agg, data_dict)
 
 
-    elif ALGORITHM == "TrustFed":
+    elif algorithmID == "TrustFed":
         _objectives, _metrics = run_trustfed_once(
             alpha=TRUSTFED_ALPHA,
             lr=LR,
@@ -117,12 +147,15 @@ def runFLSimulation():
             input_dim=input_dim,
             device=device,
             logger=logger,
-            fairness_notion=TRUSTFED_FAIRNESS,
+            fairness_notion=trustfedFairness,
             p_norm=TRUSTFED_P_NORM,
+            x_val=X_val,
+            y_val=y_val,
+            s_val=sval_list
         )
 
     else:
-        raise ValueError(f"Unknown Algorithm: {ALGORITHM}")
+        raise ValueError(f"Unknown Algorithm: {algorithmID}")
 
 def runOrigFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_agg, data_dict):
     #Track best round per metric
@@ -187,7 +220,7 @@ def runOrigFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_
 
 
         #Evaluate
-        metrics = server.evaluate()
+        metrics = server.evaluate(final=False)
         logger.log_round(r + 1, metrics)
 
         #Track best round for each metric
@@ -217,7 +250,7 @@ def runOrigFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_
     
     #Apply the averaged model as the final test
     server.load_averaged_model()
-    metrics = server.evaluate()
+    metrics = server.evaluate(final=True)
     logger.log_round(r+2, metrics)
 
     #Track best round for each metric
@@ -416,8 +449,8 @@ def runEOFedMinMaxSimulationLoop(server, clients, logger, client_loss, server_ag
 def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
     #Track best round per metric
 
-    best_blAcc_value = -1.0
-    best_round_blAcc = -1
+    best_balanced_acc_value = -1.0
+    best_round_balanced_acc = -1
 
     best_acc_value = -1.0
     best_round_acc = -1
@@ -433,6 +466,8 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
 
     best_eo_value = float('inf')
     best_round_eo = -1
+
+    bestWeights = server.broadcast_weights()
 
     # Simulation Loop
     for r in range(ROUNDS):
@@ -458,15 +493,19 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
         server.aggregate(client_reports, server_agg)
 
         # Evaluate
-        metrics = server.evaluate()
+        metrics = server.evaluate(final=False)
+
         logger.log_round(r + 1, metrics)
 
         # Track best round for each metric
-        score_key = "Balanced_Accuracy" if ALGORITHM == "TrustFed" else "Accuracy"
+        if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+            best_balanced_acc_value = metrics["balanced_Accuracy"]
+            best_round_balanced_acc = r + 1
 
-        if metrics[score_key] > best_acc_value:
-            best_acc_value = metrics[score_key]
+        if metrics["Accuracy"] > best_acc_value:
+            best_acc_value = metrics["Accuracy"]
             best_round_acc = r + 1
+            bestWeights = server.broadcast_weights()
 
         if abs(metrics["Statistical_Parity"]) < best_sp_value:
             best_sp_value = abs(metrics["Statistical_Parity"])
@@ -478,15 +517,43 @@ def runFedAvgSimulationLoop(server, clients, logger,client_loss, server_agg):
 
         print(
             f"Results Round {r + 1}: "
-            f"Balanced_Acc={metrics[score_key]:.4f}, "
+            f"Balanced_Acc={metrics['balanced_Accuracy']:.4f}, "
             f"Acc={metrics['Accuracy']:.4f}, "
             f"SP={metrics['Statistical_Parity']:.4f}, "
             f"EO={metrics['Equalized_Odds']:.4f}"
         )
     # Save best metrics to CSV and .log
+    server.loadBestModel(bestWeights)
+    metrics = server.evaluate(final= True)
+    logger.log_round(r+2, metrics)
+
+    #Track best round for each metric
+    if metrics["Accuracy"] > best_acc_value:
+        best_acc_value = metrics["Accuracy"]
+        best_round_acc = r+2
+
+    if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+        best_balanced_acc_value = metrics["balanced_Accuracy"]
+        best_round_balanced_acc = r + 2
+
+    if abs(metrics["Statistical_Parity"]) < best_sp_value:
+        best_sp_value = abs(metrics["Statistical_Parity"])
+        best_round_sp = r+2
+
+    if metrics["Equalized_Odds"] < best_eo_value:
+        best_eo_value = metrics["Equalized_Odds"]
+        best_round_eo = r+2
+
+    print(
+            f"Results Round {r+2}: "
+            f"Acc={metrics['Accuracy']:.8f}, "
+            f"Balanced Acc={metrics['balanced_Accuracy']:.8f}, "
+            f"SP={metrics['Statistical_Parity']:.8f}, "
+            f"EO={metrics['Equalized_Odds']:.8f}"
+        )
 
     logger.best_metrics = {
-        "Balanced_Accuracy": {"round": best_round_acc, "value": best_acc_value},
+        "Balanced_Accuracy": {"round": best_round_balanced_acc, "value": best_balanced_acc_value},
         "Accuracy": {"round": best_round_acc, "value": best_acc_value},
         "Statistical_Parity": {"round": best_round_sp, "value": best_sp_value},
         "Equalized_Odds": {"round": best_round_eo, "value": best_eo_value}
@@ -508,6 +575,9 @@ def run_trustfed_once(
         X_test,
         y_test,
         s_list,
+        x_val,
+        y_val, 
+        s_val,
         input_dim: int,
         device: str,
         logger: FLLogger,
@@ -540,7 +610,7 @@ def run_trustfed_once(
     """
 
     server = TrustFedServer(
-        (X_test, y_test, s_list),
+        (X_test, y_test, s_list, x_val, y_val, s_val),
         input_dim,
         device,
         fairness_notion=fairness_notion,
@@ -565,6 +635,8 @@ def run_trustfed_once(
 
     last_metrics = None
 
+    bestWeights = server.broadcast_weights()
+
     for r in range(rounds):
         print(f"\n--- Round {r + 1} ---")
         global_weights = server.broadcast_weights()
@@ -588,17 +660,18 @@ def run_trustfed_once(
         logger.log_clients(r + 1, client_reports)
         server.aggregate(client_reports, agg_trustfed)
 
-        metrics = server.evaluate()
+        metrics = server.evaluate(final=False)
         last_metrics = metrics
         logger.log_round(r + 1, metrics)
 
-        if metrics["Balanced_Accuracy"] > best_balanced_acc_value:
-            best_balanced_acc_value = metrics["Balanced_Accuracy"]
+        if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+            best_balanced_acc_value = metrics["balanced_Accuracy"]
             best_round_balanced_acc = r + 1
 
         if metrics["Accuracy"] > best_acc_value:
             best_acc_value = metrics["Accuracy"]
             best_round_acc = r + 1
+            bestWeights = server.broadcast_weights()
 
         if abs(metrics["Statistical_Parity"]) < best_sp_value:
             best_sp_value = abs(metrics["Statistical_Parity"])
@@ -610,11 +683,40 @@ def run_trustfed_once(
 
         print(
             f"Results Round {r + 1}: "
-            f"Balanced_Acc={metrics['Balanced_Accuracy']:.4f}, "
+            f"Balanced_Acc={metrics['balanced_Accuracy']:.4f}, "
             f"Acc={metrics['Accuracy']:.4f}, "
             f"SP={metrics['Statistical_Parity']:.10f}, "
             f"EO={metrics['Equalized_Odds']:.10f}"
         )
+
+    server.loadBestModel(bestWeights)
+    metrics = server.evaluate(final= True)
+    logger.log_round(r+2, metrics)
+
+    if metrics["balanced_Accuracy"] > best_balanced_acc_value:
+            best_balanced_acc_value = metrics["balanced_Accuracy"]
+            best_round_balanced_acc = r + 2
+
+    if metrics["Accuracy"] > best_acc_value:
+        best_acc_value = metrics["Accuracy"]
+        best_round_acc = r + 2
+        bestWeights = server.broadcast_weights()
+
+    if abs(metrics["Statistical_Parity"]) < best_sp_value:
+        best_sp_value = abs(metrics["Statistical_Parity"])
+        best_round_sp = r + 2
+
+    if metrics["Equalized_Odds"] < best_eo_value:
+        best_eo_value = metrics["Equalized_Odds"]
+        best_round_eo = r + 2
+
+    print(
+        f"Results Round {r + 2}: "
+        f"Balanced_Acc={metrics['balanced_Accuracy']:.4f}, "
+        f"Acc={metrics['Accuracy']:.4f}, "
+        f"SP={metrics['Statistical_Parity']:.10f}, "
+        f"EO={metrics['Equalized_Odds']:.10f}"
+    )
 
     logger.best_metrics = {
         "Balanced_Accuracy": {"round": best_round_balanced_acc, "value": best_balanced_acc_value},
@@ -628,11 +730,26 @@ def run_trustfed_once(
 
 
 if __name__ == "__main__":
-    runFLSimulation()
 
-    print("\n=======================================================")
-    print("Triggering Global Group benchmark script...")
-    print("=======================================================")
     
-    import subprocess
-    subprocess.run(["python", "run_benchmark.py"], check=True)
+    LOADERS = [
+    "adult_iid5", "adult_iid10", "adult_age3", "adult_age5", 
+    "bank_iid5", "bank_iid10", "bank_age3", "bank_age5", 
+    "kdd_iid5", "kdd_iid10", "kdd_age3", "kdd_age5", 
+    "acs_iid5", "acs_iid10", "acs_state3", "acs_state5", 
+    "cac_iid5", "cac_iid10", "cac_state3", "cac_state5"
+    ]
+    ALGORITHMS = ['FedAvg', 'FedMinMax', "EOFedMinMax", 'TrustFed']
+    TRUSTFED_FAIRNESS = ["SP", "EO"]  # "SP" or "EO"
+    NUM_RUNS = 3
+    for run_idx in range(NUM_RUNS):
+        print(f"=== Starting Experimental Run {run_idx + 1}/{NUM_RUNS} ===")
+        for algorithm in ALGORITHMS:
+            if algorithm == "TrustFed":
+                for loader in LOADERS:
+                    for fairness in TRUSTFED_FAIRNESS:
+                        runFLSimulation(loaderID=loader, algorithmID=algorithm, trustfedFairness=fairness)
+            else:
+                for loader in LOADERS:
+                    runFLSimulation(loaderID=loader, algorithmID=algorithm)
+

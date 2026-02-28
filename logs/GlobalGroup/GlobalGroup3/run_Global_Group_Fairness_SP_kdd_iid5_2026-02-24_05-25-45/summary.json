@@ -1,0 +1,32 @@
+{
+    "config": {
+        "algorithm": "Global_Group_Fairness_SP",
+        "loader": "kdd_iid5",
+        "CLIENT_EPOCHS": 1,
+        "CLIENT_BATCHSIZE": 32,
+        "CLIENT_STEPSIZE": 0.005,
+        "COMMUNICATION_ROUNDS": 50,
+        "LAMBDA": 0.2,
+        "NY": 100,
+        "timestamp": "2026-02-24_05-25-45",
+        "endTime": "2026-02-24_05-48-45"
+    },
+    "best_metrics": {
+        "Accuracy": {
+            "round": "51",
+            "value": 0.9476779151353157
+        },
+        "balanced_Accuracy": {
+            "round": 34,
+            "value": 0.7236944876133047
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 0.0030419864924624562
+        },
+        "Equalized_Odds": {
+            "round": 2,
+            "value": 0.0009345714497612789
+        }
+    }
+}

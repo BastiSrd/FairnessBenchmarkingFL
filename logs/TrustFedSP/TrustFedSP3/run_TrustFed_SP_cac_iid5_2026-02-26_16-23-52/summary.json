@@ -1,0 +1,29 @@
+{
+    "config": {
+        "algorithm": "TrustFed_SP",
+        "loader": "cac_iid5",
+        "rounds": 50,
+        "client_epochs": 1,
+        "learning_rate": 0.005,
+        "timestamp": "2026-02-26_16-23-52",
+        "endTime": "2026-02-26_16-23-56"
+    },
+    "best_metrics": {
+        "Balanced_Accuracy": {
+            "round": 50,
+            "value": 0.7951432129514322
+        },
+        "Accuracy": {
+            "round": 50,
+            "value": 0.7933333333333333
+        },
+        "Statistical_Parity": {
+            "round": 2,
+            "value": 0.04091644287109375
+        },
+        "Equalized_Odds": {
+            "round": 2,
+            "value": 0.047890275716781616
+        }
+    }
+}

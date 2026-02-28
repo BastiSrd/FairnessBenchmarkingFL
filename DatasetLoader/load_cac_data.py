@@ -32,14 +32,36 @@ CAC_STATE_MAP_5 = {
     "client_5": [18, 20, 55, 4, 46, 42, 2, 19, 11],
 }
 
-DROP_COLS = [  # these columns are dropped since they have to many missing values, adapted from Komiyama et al. (2018)
+DROP_COLS = [  # these columns are dropped since they have to many missing values, no predictive value or are meta information, adapted from Komiyama et al. (2018)
     "community",
-    "LemasSwornFT", "LemasSwFTPerPop", "LemasSwFTFieldOps", "LemasSwFTFieldPerPop",
-    "LemasTotalReq", "LemasTotReqPerPop", "PolicReqPerOffic", "PolicPerPop",
-    "RacialMatchCommPol", "PctPolicWhite", "PctPolicBlack", "PctPolicHisp",
-    "PctPolicAsian", "PctPolicMinor", "OfficAssgnDrugUnits", "NumKindsDrugsSeiz",
-    "PolicAveOTWorked", "PolicCars", "PolicOperBudg", "LemasPctPolicOnPatr",
-    "LemasGangUnitDeploy", "PolicBudgPerPop"
+    "communityname",
+    "county",
+
+    "OtherPerCap",
+
+    "LemasSwornFT",
+    "LemasSwFTPerPop",
+    "LemasSwFTFieldOps",
+    "LemasSwFTFieldPerPop",
+    "LemasTotalReq",
+    "LemasTotReqPerPop",
+    "PolicReqPerOffic",
+    "PolicPerPop",
+    "RacialMatchCommPol",
+    "PctPolicWhite",
+    "PctPolicBlack",
+    "PctPolicHisp",
+    "PctPolicAsian",
+    "PctPolicMinor",
+    "OfficAssgnDrugUnits",
+    "NumKindsDrugsSeiz",
+    "PolicAveOTWorked",
+    "PolicCars",
+    "PolicOperBudg",
+    "LemasPctPolicOnPatr",
+    "LemasGangUnitDeploy",
+    "LemasPctOfficDrugUn",
+    "PolicBudgPerPop",
 ]
 
 

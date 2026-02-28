@@ -1,4 +1,24 @@
 import subprocess
+import sys
+import os
+
+print("=======================================================")
+print("    Checking and Installing Requirements...")
+print("=======================================================")
+
+# Auto-Install Requirements
+req_file = "requirements.txt"
+if os.path.exists(req_file):
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
+        print("Requirements installed successfully!\n")
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing requirements: {e}")
+        print("Please check your internet connection or install manually.")
+        sys.exit(1)
+else:
+    print(f"Warning: '{req_file}' not found. Skipping auto-install.\n")
+
 
 print("=======================================================")
 print("    Starting Global Group Fairness Federated Learning Benchmark")
@@ -22,10 +42,10 @@ for loader in LOADERS:
         print(f"\n  --- Run {i} of {RUNS} for {loader} ---")
         
         print("  [1/2] Running Global_Group (Statistical Parity)...")
-        subprocess.run(["python", "-m", "Global_Group.main", "--loader", loader], check=True)
+        subprocess.run([sys.executable, "-m", "Global_Group.main", "--loader", loader], check=True)
         
         print("  [2/2] Running Global_Group_Eodd (Equalized Odds)...")
-        subprocess.run(["python", "-m", "Global_Group_Eodd.main", "--loader", loader], check=True)
+        subprocess.run([sys.executable, "-m", "Global_Group_Eodd.main", "--loader", loader], check=True)
 
 print("\n=======================================================")
 print("                BENCHMARK COMPLETE!")

@@ -89,7 +89,7 @@ class OrigFedMinMaxServer:
         self.gid_to_idx = {gid: i for i, gid in enumerate(self.group_ids)}
         rho_list = [total_group_counts[gid] / total for gid in self.group_ids]
         self.rho = torch.tensor(rho_list, device=self.device)
-        self.mu = torch.tensor(rho_list, device=self.device) # Initialize mu = rho [cite: 236]
+        self.mu = torch.tensor(rho_list, device=self.device) # Initialize mu = rho
 
     def initializeWeights(self):
         """Returns the global model weights (on CPU) and group weights to be sent to clients."""
@@ -170,7 +170,7 @@ class OrigFedMinMaxServer:
             s_orig_flat = eval_s.view(-1)
             preds_flat = preds.view(-1)
 
-            # 2. Compute Fairness Metrics using new functions
+            # Compute Fairness Metrics using new functions
             stat_parity = compute_statistical_parity(preds_flat, s_orig_flat)
             eq_odds = compute_equalized_odds(preds_flat, y_flat, s_orig_flat)
             balAcc = compute_balanced_accuracy(preds_flat, y_flat)

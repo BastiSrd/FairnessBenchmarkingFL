@@ -8,39 +8,51 @@ def project_simplex(v, eps=0.0, device="cpu"):
     Project v onto the simplex {x: sum x = 1, x_i >= eps}.
     If eps=0.0, this reduces to the standard probability simplex projection.
     """
-    v = np.asarray(v, dtype=float)
-    d = v.size
+    # Ensure v is a float tensor on the correct device
+    if not torch.is_tensor(v):
+        v = torch.tensor(v, dtype=torch.float32, device=device)
+    else:
+        v = v.to(device).float()
+    d = v.shape[0]
 
     if eps < 0:
         raise ValueError("eps must be >= 0")
     if d * eps > 1.0 + 1e-12:
         raise ValueError(f"Infeasible: d*eps={d*eps} > 1. Choose smaller eps.")
 
+    # Shift by eps so we can project onto the standard simplex of mass (1 - d*eps)
     mass = 1.0 - d * eps
     u = v - eps
 
+    # If mass == 0, the only feasible point is all-eps
     if mass <= 1e-15:
-        return np.full(d, eps, dtype=float)
+        return torch.full((d,), eps, device=device, dtype=torch.float32)
 
-    s = np.sort(u)[::-1]
-    cssv = np.cumsum(s) - mass
-    ind = np.arange(1, d + 1)
+    # Standard simplex projection for y: sum y = mass, y >= 0
+    s, _ = torch.sort(u, descending=True)
+    cssv = torch.cumsum(s, dim=0) - mass
+    ind = torch.arange(1, d + 1, device=device).float()
     cond = s - cssv / ind > 0
-    if not np.any(cond):
-        y = np.zeros(d, dtype=float)
-        y[np.argmax(u)] = mass
+    indices = torch.nonzero(cond)
+    if indices.numel() == 0:
+        # Fallback: all mass to the max coordinate
+        y = torch.zeros(d, device=device)
+        y[torch.argmax(u)] = mass
     else:
-        rho = ind[cond][-1]
-        theta = cssv[cond][-1] / rho
-        y = np.maximum(u - theta, 0.0)
+        rho_idx = indices[-1].item()
+        theta = cssv[rho_idx] / (rho_idx + 1)
+        y = torch.clamp(u - theta, min=0.0)
 
     x = y + eps
-    x = np.maximum(x, eps)
+
+    # Numerical cleanup to enforce constraints tightly
+    x = torch.clamp(x, min=eps)
     x /= x.sum()
-    return torch.tensor(x, device=device)
+
+    return x.detach().clone().to(device)
 
 
-# --- Client Strategy: Utility + EO ---
+#Client Strategy: Utility + EO
 def loss_EOfedminmax(outputs, targets, sensitive_attrs, context, device):
     """
     Utility + Equalized Odds penalty (soft version).
@@ -49,30 +61,26 @@ def loss_EOfedminmax(outputs, targets, sensitive_attrs, context, device):
     lambda_eo is provided by the server and is adaptive (not fixed).
     """
     # From server
-    w_y0 = context.get("group_weights_y0", {})  # weights for Y=0 slice (FPR proxy)
-    w_y1 = context.get("group_weights_y1", {})  # weights for Y=1 slice (FNR proxy)
+    w_y0 = context.get("group_weights_y0", {})  
+    w_y1 = context.get("group_weights_y1", {})  
     lambda_eo = float(context.get("lambda_eo", 0.0))
 
-    # From client injection (FedMinMaxClient.train sets these)
+    # From client injection
     criterion = nn.BCEWithLogitsLoss(reduction='mean')
 
     # Flatten
     s = sensitive_attrs.view(-1).long()
     y = targets.view(-1).float()
-    logits = outputs.view(-1).float()      # <-- logits
-    probs  = torch.sigmoid(logits)         # <-- probabilities only for EO proxies
+    logits = outputs.view(-1).float()      
+    probs  = torch.sigmoid(logits)         
 
 
-    # 1) Utility loss (standard)
     utility_loss = criterion(logits, y)
     
     # If lambda is 0, avoid extra compute
     if lambda_eo <= 0.0:
         return utility_loss
 
-    # 2) EO penalty (soft)
-    # - FPR proxy: mean(p) on samples with y=0
-    # - FNR proxy: mean(1-p) on samples with y=1
     fairness_fpr = torch.tensor(0.0).to(device)
     fairness_fnr = torch.tensor(0.0).to(device)
     sum_w0 = 0.0
@@ -114,15 +122,10 @@ def loss_EOfedminmax(outputs, targets, sensitive_attrs, context, device):
     return utility_loss + lambda_eo * (fairness_loss)
 
 
-# --- Server Strategy: FedAvg + EO adversary update ---
+#Server Strategy: FedAvg + EO adversary update
 def agg_EOfedminmax(client_reports, global_model, device, server_state):
-    """
-    1) FedAvg aggregation 
-    2) Update adversary weights for EO:
-       - mu_y0 updated using global soft-FPR per group
-       - mu_y1 updated using global soft-FNR per group
-    """
-    # 1) FedAvg aggregation
+   
+    
     avg_weights = {}
     total_samples = sum(r['samples'] for r in client_reports)
 
@@ -137,14 +140,13 @@ def agg_EOfedminmax(client_reports, global_model, device, server_state):
 
     global_model.load_state_dict(avg_weights)
 
-    # 2) EO adversary update
     mu_y0 = server_state["mu_y0"]
     mu_y1 = server_state["mu_y1"]
     lr_mu = float(server_state["lr_mu"])
     group_ids = server_state["group_ids"]
 
-    global_count_y0 = server_state["group_counts_y0"]  # {gid: n_{gid, y=0}}
-    global_count_y1 = server_state["group_counts_y1"]  # {gid: n_{gid, y=1}}
+    global_count_y0 = server_state["group_counts_y0"]  
+    global_count_y1 = server_state["group_counts_y1"] 
 
     # risk vectors: FPR (y=0) and FNR (y=1)
     fpr_vec = torch.zeros(len(group_ids), device=device, dtype=torch.float32)
