@@ -89,7 +89,7 @@ class FedAvgServer:
             s_flat = eval_s.view(-1)
             preds_flat = preds.view(-1)
 
-            # 2. Compute Fairness Metrics using new functions
+            #Compute Fairness Metrics using new functions
             stat_parity = compute_statistical_parity(preds_flat, s_flat)
             eq_odds = compute_equalized_odds(preds_flat, y_flat, s_flat)
             balanced_acc = compute_balanced_accuracy(preds_flat, y_flat)

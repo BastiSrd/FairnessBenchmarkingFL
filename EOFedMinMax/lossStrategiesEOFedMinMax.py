@@ -21,7 +21,6 @@ def project_simplex(v, eps=0.0, device="cpu"):
         raise ValueError(f"Infeasible: d*eps={d*eps} > 1. Choose smaller eps.")
 
     # Shift by eps so we can project onto the standard simplex of mass (1 - d*eps)
-    # Let x = eps + y, with y_i >= 0 and sum y_i = 1 - d*eps
     mass = 1.0 - d * eps
     u = v - eps
 
@@ -30,7 +29,6 @@ def project_simplex(v, eps=0.0, device="cpu"):
         return torch.full((d,), eps, device=device, dtype=torch.float32)
 
     # Standard simplex projection for y: sum y = mass, y >= 0
-    # Implementation: sort, find threshold, clamp.
     s, _ = torch.sort(u, descending=True)
     cssv = torch.cumsum(s, dim=0) - mass
     ind = torch.arange(1, d + 1, device=device).float()
@@ -54,7 +52,7 @@ def project_simplex(v, eps=0.0, device="cpu"):
     return x.detach().clone().to(device)
 
 
-# --- Client Strategy: Utility + EO ---
+#Client Strategy: Utility + EO
 def loss_EOfedminmax(outputs, targets, sensitive_attrs, context, device):
     """
     Utility + Equalized Odds penalty (soft version).
@@ -63,30 +61,26 @@ def loss_EOfedminmax(outputs, targets, sensitive_attrs, context, device):
     lambda_eo is provided by the server and is adaptive (not fixed).
     """
     # From server
-    w_y0 = context.get("group_weights_y0", {})  # weights for Y=0 slice (FPR proxy)
-    w_y1 = context.get("group_weights_y1", {})  # weights for Y=1 slice (FNR proxy)
+    w_y0 = context.get("group_weights_y0", {})  
+    w_y1 = context.get("group_weights_y1", {})  
     lambda_eo = float(context.get("lambda_eo", 0.0))
 
-    # From client injection (FedMinMaxClient.train sets these)
+    # From client injection
     criterion = nn.BCEWithLogitsLoss(reduction='mean')
 
     # Flatten
     s = sensitive_attrs.view(-1).long()
     y = targets.view(-1).float()
-    logits = outputs.view(-1).float()      # <-- logits
-    probs  = torch.sigmoid(logits)         # <-- probabilities only for EO proxies
+    logits = outputs.view(-1).float()      
+    probs  = torch.sigmoid(logits)         
 
 
-    # 1) Utility loss (standard)
     utility_loss = criterion(logits, y)
     
     # If lambda is 0, avoid extra compute
     if lambda_eo <= 0.0:
         return utility_loss
 
-    # 2) EO penalty (soft)
-    # - FPR proxy: mean(p) on samples with y=0
-    # - FNR proxy: mean(1-p) on samples with y=1
     fairness_fpr = torch.tensor(0.0).to(device)
     fairness_fnr = torch.tensor(0.0).to(device)
     sum_w0 = 0.0
@@ -128,15 +122,10 @@ def loss_EOfedminmax(outputs, targets, sensitive_attrs, context, device):
     return utility_loss + lambda_eo * (fairness_loss)
 
 
-# --- Server Strategy: FedAvg + EO adversary update ---
+#Server Strategy: FedAvg + EO adversary update
 def agg_EOfedminmax(client_reports, global_model, device, server_state):
-    """
-    1) FedAvg aggregation 
-    2) Update adversary weights for EO:
-       - mu_y0 updated using global soft-FPR per group
-       - mu_y1 updated using global soft-FNR per group
-    """
-    # 1) FedAvg aggregation
+   
+    
     avg_weights = {}
     total_samples = sum(r['samples'] for r in client_reports)
 
@@ -151,14 +140,13 @@ def agg_EOfedminmax(client_reports, global_model, device, server_state):
 
     global_model.load_state_dict(avg_weights)
 
-    # 2) EO adversary update
     mu_y0 = server_state["mu_y0"]
     mu_y1 = server_state["mu_y1"]
     lr_mu = float(server_state["lr_mu"])
     group_ids = server_state["group_ids"]
 
-    global_count_y0 = server_state["group_counts_y0"]  # {gid: n_{gid, y=0}}
-    global_count_y1 = server_state["group_counts_y1"]  # {gid: n_{gid, y=1}}
+    global_count_y0 = server_state["group_counts_y0"]  
+    global_count_y1 = server_state["group_counts_y1"] 
 
     # risk vectors: FPR (y=0) and FNR (y=1)
     fpr_vec = torch.zeros(len(group_ids), device=device, dtype=torch.float32)

@@ -20,7 +20,6 @@ def project_simplex(v, eps=0.0, device="cpu"):
         raise ValueError(f"Infeasible: d*eps={d*eps} > 1. Choose smaller eps.")
 
     # Shift by eps so we can project onto the standard simplex of mass (1 - d*eps)
-    # Let x = eps + y, with y_i >= 0 and sum y_i = 1 - d*eps
     mass = 1.0 - d * eps
     u = v - eps
 
@@ -29,7 +28,6 @@ def project_simplex(v, eps=0.0, device="cpu"):
         return torch.full((d,), eps, device=device, dtype=torch.float32)
 
     # Standard simplex projection for y: sum y = mass, y >= 0
-    # Implementation: sort, find threshold, clamp.
     s, _ = torch.sort(u, descending=True)
     cssv = torch.cumsum(s, dim=0) - mass
     ind = torch.arange(1, d + 1, device=device).float()
@@ -52,7 +50,7 @@ def project_simplex(v, eps=0.0, device="cpu"):
 
     return x.detach().clone().to(device)
 
-# --- Client Strategy: FedMinMax Loss ---
+#Client Strategy: FedMinMax Loss
 def loss_Origfedminmax(outputs, targets, sensitive_attrs, context):
     """
     Calculates weighted loss based on global importance weights (w).
@@ -76,20 +74,20 @@ def loss_Origfedminmax(outputs, targets, sensitive_attrs, context):
     weighted = loss_per_sample * sample_weights
     return weighted.mean()
 
-# --- Server Strategy: FedMinMax Aggregation ---
+#Server Strategy: FedMinMax Aggregation
 def agg_Origfedminmax(client_reports, global_model, device, server_state):
     """
     1. Aggregates model weights (Standard FedAvg).
     2. Updates adversarial weights mu based on reported group risks.
     """
-    # 1) FedAvg aggregation
+    #FedAvg aggregation
     avg_weights = {}
     total_samples = sum(r['samples'] for r in client_reports)
 
     for r in client_reports:
         scale = r['samples'] / total_samples
         for k, v in r['weights'].items():
-            v = v.to(device)  # optional: keep on device
+            v = v.to(device)
             if k in avg_weights:
                 avg_weights[k] += v * scale
             else:
@@ -97,7 +95,7 @@ def agg_Origfedminmax(client_reports, global_model, device, server_state):
 
     global_model.load_state_dict(avg_weights)
 
-    # 2) Mu update (projected gradient ascent)
+    #Mu update (projected gradient ascent)
     mu = server_state['mu']
     lr_mu = server_state['lr_mu']
     global_group_counts = server_state['group_counts']
