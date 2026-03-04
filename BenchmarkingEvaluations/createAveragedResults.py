@@ -61,7 +61,7 @@ def aggregate_benchmarks(root_dir="logs"):
 
 
 if __name__ == "__main__":
-    ALGORITHM_NAME = "FedAvg"
+    ALGORITHM_NAME = "FedAvg" #available options: FedAvg, FedMinMax, EOFedMinMax, TrustFedEO, TrustFedSP, Global_Group, Global_Group_Eodd
     results = aggregate_benchmarks(f"logs/{ALGORITHM_NAME}")
     results.to_csv(f"./BenchmarkingEvaluations/final_dataset_averages_{ALGORITHM_NAME}.csv", index=False)
     print(results)
