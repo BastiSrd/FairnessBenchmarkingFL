@@ -22,7 +22,7 @@ The framework evaluates algorithms using both accuracy and fairness metrics:
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.11+ (tested on 3.13.3)
 - pip or conda
 
 ### Setup
@@ -128,10 +128,10 @@ To change batch sizes, edit the respective client files.
 Post-training analysis available in `BenchmarkingEvaluations/`:
 
 ```bash
-# Average results across multiple runs
+# Average results across multiple runs 
 python BenchmarkingEvaluations/createAveragedResults.py
 
-# Combine final results from all algorithms
+# Combine final results for one algorithm differentiated by run
 python BenchmarkingEvaluations/createCombinedFinalResults.py
 
 # Perform statistical significance tests
